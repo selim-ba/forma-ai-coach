@@ -406,14 +406,24 @@ def main() -> None:
         M[:3, 3] = s0[j, :3]
         ibm[j] = np.linalg.inv(M).flatten(order="F")
 
+    colors = None
+    if personal and (args.identity.parent / "appearance.npz").is_file():
+        srgb = np.load(args.identity.parent / "appearance.npz")["colors"].astype(np.float32) / 255.0
+        if len(srgb) == len(v0):
+            # glTF vertex colours are linear; photo pixels are sRGB.
+            colors = np.where(srgb <= 0.04045, srgb / 12.92, ((srgb + 0.055) / 1.055) ** 2.4).astype(np.float32)
+            print(f"  using photo colours from {args.identity.parent.name}/appearance.npz")
+    base_color = [1, 1, 1, 1] if colors is not None else [0.86, 0.80, 0.74, 1]
     g.doc["materials"].append({"name": "Skin", "pbrMetallicRoughness": {
-        "baseColorFactor": [0.86, 0.80, 0.74, 1], "metallicFactor": 0, "roughnessFactor": 0.7}})
+        "baseColorFactor": base_color, "metallicFactor": 0, "roughnessFactor": 0.8}})
     attrs = {
         "POSITION": g.accessor(v0.astype(np.float32), "VEC3", ARRAY_BUFFER, minmax=True),
         "NORMAL": g.accessor(normals.astype(np.float32), "VEC3", ARRAY_BUFFER),
         "JOINTS_0": g.accessor(jidx, "VEC4", ARRAY_BUFFER),
         "WEIGHTS_0": g.accessor(jw, "VEC4", ARRAY_BUFFER),
     }
+    if colors is not None:
+        attrs["COLOR_0"] = g.accessor(colors, "VEC3", ARRAY_BUFFER)
     ind_type = np.uint16 if len(v0) < 65535 else np.uint32
     g.doc["meshes"].append({"name": "Avatar", "primitives": [{
         "attributes": attrs, "indices": g.accessor(faces.reshape(-1).astype(ind_type), "SCALAR", ELEMENT_ARRAY_BUFFER),

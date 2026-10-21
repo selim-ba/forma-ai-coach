@@ -25,6 +25,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from appearance import best_projector, overlay_image, rasterize_ids, sample_vertex_colors
 from mhr_common import HERE, MHRModel
 
 SAM_DIR_DEFAULT = HERE / "vendor" / "sam-3d-body"
@@ -128,6 +129,19 @@ def main() -> None:
     }
     path = out_dir / "identity.json"
     path.write_text(json.dumps(out, indent=2) + "\n")
+
+    # ---- Diagnostics + appearance (both stay in the git-ignored private folder) ----
+    posed = np.asarray(person["pred_vertices"], np.float64).reshape(-1, 3)
+    faces = np.asarray(estimator.faces, np.int64)
+    err, project, signs = best_projector(person, w, h)
+    uv, depth = project(posed)
+    print(f"  projection check: median 2D keypoint error {err:.1f}px (image {w}x{h}, signs {signs})")
+    overlay_image(img, uv, depth, faces, posed).save(out_dir / "overlay.png")
+    ids = rasterize_ids(uv, depth, faces, w, h)
+    colors, visible = sample_vertex_colors(img, uv, ids, faces, posed)
+    np.savez_compressed(out_dir / "appearance.npz", colors=colors, visible=visible)
+    print(f"  wrote {(out_dir / 'overlay.png').relative_to(HERE)} and appearance.npz "
+          f"({visible.mean()*100:.0f}% of vertices seen in the photo; the rest is filled in)")
     print(f"✓ wrote {path.relative_to(HERE)} — model height {height:.2f} m "
           "(absolute scale from one photo is approximate; proportions are what matter)")
     print(f"  next: python build_avatar.py --identity {path.relative_to(HERE)}")
