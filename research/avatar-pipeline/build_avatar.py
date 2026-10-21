@@ -88,6 +88,49 @@ def curl_pose(c: float, twist: float) -> dict:
 POSES = {"squat": squat_pose, "biceps_curl": curl_pose}
 
 
+def cylinder(center: np.ndarray, axis: np.ndarray, radius: float, length: float, segments: int = 20):
+    """Closed cylinder as (positions, normals, triangle indices); flat caps, smooth sides."""
+    axis = axis / np.linalg.norm(axis)
+    ref = np.array([0.0, 1.0, 0.0]) if abs(axis[1]) < 0.9 else np.array([1.0, 0.0, 0.0])
+    a = np.cross(axis, ref)
+    a /= np.linalg.norm(a)
+    b = np.cross(axis, a)
+    ang = np.linspace(0, 2 * np.pi, segments, endpoint=False)
+    ring = np.cos(ang)[:, None] * a + np.sin(ang)[:, None] * b
+    lo, hi = center - axis * length / 2, center + axis * length / 2
+    pos, nrm, tris = [], [], []
+    # sides
+    pos += [lo + radius * ring, hi + radius * ring]
+    nrm += [ring, ring]
+    for i in range(segments):
+        j = (i + 1) % segments
+        tris += [[i, j, segments + i], [j, segments + j, segments + i]]
+    # caps
+    for end, sign in ((lo, -1.0), (hi, 1.0)):
+        base = sum(len(p_) for p_ in pos)
+        pos += [end[None, :], end + radius * ring]
+        nrm += [np.repeat(sign * axis[None, :], segments + 1, axis=0)]
+        for i in range(segments):
+            j = (i + 1) % segments
+            tris.append([base, base + 1 + i, base + 1 + j] if sign > 0 else [base, base + 1 + j, base + 1 + i])
+    return np.concatenate(pos), np.concatenate(nrm), np.asarray(tris, np.int64)
+
+
+def dumbbell(center: np.ndarray, axis: np.ndarray):
+    """A light dumbbell: 14 cm handle, two 9 cm-diameter plates clear of a ~9 cm-wide hand."""
+    axis = axis / np.linalg.norm(axis)
+    parts = [cylinder(center, axis, 0.015, 0.16),
+             cylinder(center + axis * 0.065, axis, 0.045, 0.03),
+             cylinder(center - axis * 0.065, axis, 0.045, 0.03)]
+    pos, nrm, tris, off = [], [], [], 0
+    for p_, n_, t_ in parts:
+        pos.append(p_)
+        nrm.append(n_)
+        tris.append(t_ + off)
+        off += len(p_)
+    return np.concatenate(pos), np.concatenate(nrm), np.concatenate(tris)
+
+
 # --------------------------------------------------------------------------- math
 def quat_to_mat(q: np.ndarray) -> np.ndarray:
     x, y, z, w = q / np.linalg.norm(q)
@@ -431,7 +474,39 @@ def main() -> None:
     g.doc["skins"].append({"joints": list(range(n_j)), "skeleton": roots[0],
                            "inverseBindMatrices": g.accessor(ibm, "MAT4")})
     g.doc["nodes"].append({"name": "Avatar", "mesh": 0, "skin": 0})
-    g.doc["scenes"][0]["nodes"] = roots + [len(g.doc["nodes"]) - 1]
+    scene_nodes = roots + [len(g.doc["nodes"]) - 1]
+
+    # Dumbbells, rigidly attached to each wrist joint. The app shows the mesh named
+    # "Dumbbells" only for exercises with the dumbbell prop (the biceps curl).
+    g.doc["materials"].append({"name": "Prop", "pbrMetallicRoughness": {
+        "baseColorFactor": [0.10, 0.11, 0.12, 1], "metallicFactor": 0.6, "roughnessFactor": 0.35}})
+    db_pos, db_nrm, db_tri, db_joint = [], [], [], []
+    for side in ("l", "r"):
+        w, mid, ind, pin = fingers[side]
+        palm_center = s0[w, :3] + 0.55 * (s0[mid, :3] - s0[w, :3])
+        center = palm_center + palm_normal(s0, side) * 0.035   # in front of the palm, inside the grip
+        p_, n_, t_ = dumbbell(center, s0[ind, :3] - s0[pin, :3])  # handle runs across the palm
+        db_tri.append(t_ + sum(len(x) for x in db_pos))
+        db_pos.append(p_)
+        db_nrm.append(n_)
+        db_joint.append(np.full(len(p_), idx[f"{side}_wrist"], np.uint16))
+    db_pos_a = np.concatenate(db_pos).astype(np.float32)
+    db_j = np.zeros((len(db_pos_a), 4), np.uint16)
+    db_j[:, 0] = np.concatenate(db_joint)
+    db_w = np.zeros((len(db_pos_a), 4), np.float32)
+    db_w[:, 0] = 1.0
+    g.doc["meshes"].append({"name": "Dumbbells", "primitives": [{
+        "attributes": {
+            "POSITION": g.accessor(db_pos_a, "VEC3", ARRAY_BUFFER, minmax=True),
+            "NORMAL": g.accessor(np.concatenate(db_nrm).astype(np.float32), "VEC3", ARRAY_BUFFER),
+            "JOINTS_0": g.accessor(db_j, "VEC4", ARRAY_BUFFER),
+            "WEIGHTS_0": g.accessor(db_w, "VEC4", ARRAY_BUFFER),
+        },
+        "indices": g.accessor(np.concatenate(db_tri).reshape(-1).astype(np.uint16), "SCALAR", ELEMENT_ARRAY_BUFFER),
+        "material": 1}]})
+    g.doc["nodes"].append({"name": "Dumbbells", "mesh": 1, "skin": 0})
+    scene_nodes.append(len(g.doc["nodes"]) - 1)
+    g.doc["scenes"][0]["nodes"] = scene_nodes
 
     for clip, (lt, lq) in clips.items():
         t_acc = g.accessor(times, "SCALAR", minmax=True)
