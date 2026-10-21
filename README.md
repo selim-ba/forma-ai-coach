@@ -2,7 +2,7 @@
 
 > An iPhone-first, interactive 3D exercise demonstrator powered by GPT-6.1 Sol.
 
-**Status:** MVP deployed (HTTPS, Vercel) and verified on a physical iPhone 13; final rehearsal pending. See [Implementation status](#implementation-status).  
+**Status:** MVP complete: deployed over HTTPS (Vercel), verified on a physical iPhone 13, and the 60-second demo rehearsed twice. See [Implementation status](#implementation-status).  
 **Target device:** iPhone 13 (Safari, Add to Home Screen)  
 **Development device:** MacBook Pro M4 Pro  
 **Budget:** 20 engineering hours  
@@ -167,7 +167,7 @@ Last updated 2026-10-21.
 | 13–15 Chat + reducer | Done | Commands applied once, visible in the Actions log; 40/40 unit tests |
 | 15–17 Device testing, errors | Done | Physical iPhone 13: touch rotation, controls, keyboard, landscape, smooth playback, the GPT demo script over mobile data, and the offline message (coach unavailable, manual controls remain) |
 | 17–19 Polish, deploy | Done | Deployed on Vercel over HTTPS (framework preset: Next.js; production branch `mvp/generic-avatar`); Add to Home Screen verified |
-| 19–20 Rehearsal | Pending | Rehearse twice on the deployed URL and record a backup video |
+| 19–20 Rehearsal | Done | The 60-second demo script completed twice in a row without intervention, from the Home Screen app (one cold start, one continuing run) |
 
 Known follow-ups:
 - Optional: fall back to the keyword coach, labelled Offline, so typed commands work without a connection.
