@@ -48,6 +48,15 @@ class GLB:
         self.doc["accessors"].append(acc)
         return len(self.doc["accessors"]) - 1
 
+    def texture(self, data: bytes, mime: str = "image/jpeg") -> int:
+        """Embed an image; returns the texture index (linear filtering with mipmaps, clamped)."""
+        view = self._view(data, None)
+        self.doc.setdefault("images", []).append({"bufferView": view, "mimeType": mime})
+        self.doc.setdefault("samplers", []).append({"magFilter": 9729, "minFilter": 9987, "wrapS": 33071, "wrapT": 33071})
+        self.doc.setdefault("textures", []).append({"sampler": len(self.doc["samplers"]) - 1,
+                                                    "source": len(self.doc["images"]) - 1})
+        return len(self.doc["textures"]) - 1
+
     def to_bytes(self) -> bytes:
         while len(self.bin) % 4:
             self.bin.append(0)

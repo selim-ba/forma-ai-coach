@@ -23,6 +23,9 @@ from pathlib import Path
 import numpy as np
 
 from glb_writer import ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER, GLB
+from hair import add_hair, head_weight, srgb_to_linear
+import texture
+from appearance import mirror_map
 from mhr_common import HERE, MHRModel
 
 REPO = HERE.parent.parent
@@ -181,6 +184,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--identity", type=Path, help="identity.json from reconstruct.py (omit for the generic body)")
     ap.add_argument("--name", default=None, help="output name (default: mhr-generic, or the identity folder name)")
+    ap.add_argument("--no-texture", action="store_true", help="per-vertex photo colours only (no photo texture)")
     args = ap.parse_args()
 
     m = MHRModel()
@@ -424,6 +428,28 @@ def main() -> None:
         normals = -normals
     normals /= np.linalg.norm(normals, axis=1, keepdims=True) + 1e-12
 
+    photo_srgb = None
+    if personal and (args.identity.parent / "appearance.npz").is_file():
+        photo_srgb = np.load(args.identity.parent / "appearance.npz")["colors"].astype(np.float64) / 255.0
+        if len(photo_srgb) != len(v0):
+            photo_srgb = None
+        else:
+            print(f"  using photo colours from {args.identity.parent.name}/appearance.npz")
+
+    # Hair: MHR bodies are bald. Push the scalp out and tint it (see hair.py).
+    eye_mid = (s0[idx["l_eye"], :3] + s0[idx["r_eye"], :3]) / 2
+    v_bald = v0.copy()  # symmetric rest mesh, for the left/right mirror map
+    v0, srgb, hair_info = add_hair(v0.astype(np.float64), normals, faces.astype(np.int64),
+                                   head_weight(m.lbs_indices, m.lbs_weights, list(m.joint_names)), eye_mid, photo_srgb)
+    print(f"  hair: {hair_info}")
+    normals = np.zeros_like(v0)
+    tri = v0[faces]
+    fn = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    for k in range(3):
+        np.add.at(normals, faces[:, k], fn)
+    normals /= np.linalg.norm(normals, axis=1, keepdims=True) + 1e-12
+    colors = srgb_to_linear(srgb).astype(np.float32)  # glTF vertex colours are linear
+
     order = np.argsort(m.lbs_weights, axis=1)[:, ::-1][:, :4]
     jidx = np.take_along_axis(m.lbs_indices, order, axis=1).astype(np.uint16)
     jw = np.take_along_axis(m.lbs_weights, order, axis=1)
@@ -449,25 +475,34 @@ def main() -> None:
         M[:3, 3] = s0[j, :3]
         ibm[j] = np.linalg.inv(M).flatten(order="F")
 
-    colors = None
-    if personal and (args.identity.parent / "appearance.npz").is_file():
-        srgb = np.load(args.identity.parent / "appearance.npz")["colors"].astype(np.float32) / 255.0
-        if len(srgb) == len(v0):
-            # glTF vertex colours are linear; photo pixels are sRGB.
-            colors = np.where(srgb <= 0.04045, srgb / 12.92, ((srgb + 0.055) / 1.055) ** 2.4).astype(np.float32)
-            print(f"  using photo colours from {args.identity.parent.name}/appearance.npz")
-    base_color = [1, 1, 1, 1] if colors is not None else [0.86, 0.80, 0.74, 1]
-    g.doc["materials"].append({"name": "Skin", "pbrMetallicRoughness": {
-        "baseColorFactor": base_color, "metallicFactor": 0, "roughnessFactor": 0.8}})
+    # Photo texture (personal avatars): split the mesh per photo, see texture.py. Textured
+    # vertices get a white colour multiplier; the untextured rest continues the texture's colours.
+    tex = None
+    if personal and not args.no_texture:
+        tex = texture.build(faces.astype(np.int64), args.identity.parent, mirror_map(v_bald))
+    pbr = {"baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0, "roughnessFactor": 0.8}
+    out_v, out_n, out_faces = v0, normals, faces
+    if tex is not None:
+        vm = tex["vertex_map"]
+        out_v, out_n, jidx, jw = v0[vm], normals[vm], jidx[vm], jw[vm]
+        colors = srgb_to_linear(tex["fallback_srgb"]).astype(np.float32)
+        out_faces = tex["faces"]
+        pbr["baseColorTexture"] = {"index": g.texture(tex["jpeg"])}
+        print(f"  photo texture: {tex['info']}")
+    elif personal and not args.no_texture:
+        print("  no texture_views.npz: re-run reconstruct.py to get the sharper photo texture")
+    g.doc["materials"].append({"name": "Skin", "pbrMetallicRoughness": pbr})
     attrs = {
-        "POSITION": g.accessor(v0.astype(np.float32), "VEC3", ARRAY_BUFFER, minmax=True),
-        "NORMAL": g.accessor(normals.astype(np.float32), "VEC3", ARRAY_BUFFER),
+        "POSITION": g.accessor(out_v.astype(np.float32), "VEC3", ARRAY_BUFFER, minmax=True),
+        "NORMAL": g.accessor(out_n.astype(np.float32), "VEC3", ARRAY_BUFFER),
         "JOINTS_0": g.accessor(jidx, "VEC4", ARRAY_BUFFER),
         "WEIGHTS_0": g.accessor(jw, "VEC4", ARRAY_BUFFER),
+        "COLOR_0": g.accessor(colors, "VEC3", ARRAY_BUFFER),
     }
-    if colors is not None:
-        attrs["COLOR_0"] = g.accessor(colors, "VEC3", ARRAY_BUFFER)
-    ind_type = np.uint16 if len(v0) < 65535 else np.uint32
+    if tex is not None:
+        attrs["TEXCOORD_0"] = g.accessor(tex["uv"].astype(np.float32), "VEC2", ARRAY_BUFFER)
+    faces = out_faces
+    ind_type = np.uint16 if len(out_v) < 65535 else np.uint32
     g.doc["meshes"].append({"name": "Avatar", "primitives": [{
         "attributes": attrs, "indices": g.accessor(faces.reshape(-1).astype(ind_type), "SCALAR", ELEMENT_ARRAY_BUFFER),
         "material": 0}]})
@@ -527,7 +562,8 @@ def main() -> None:
         "personal": personal, "units": "metres", "up": "+Y", "forward": "+Z",
         "bytes": out_path.stat().st_size, "vertices": int(len(v0)), "joints": n_j,
         "animatedJoints": {"rotation": len(rot_joints), "translation": len(pos_joints)},
-        "heightM": round(float(v0[:, 1].max()), 3), "palmTwist": round(twist, 3),
+        "heightM": round(float(v0[:, 1].max()), 3), "palmTwist": round(twist, 3), "hair": hair_info,
+        "texture": tex["info"] if tex is not None else None,
         "clips": report,
     }
     out_path.with_suffix(".meta.json").write_text(json.dumps(meta, indent=2) + "\n")

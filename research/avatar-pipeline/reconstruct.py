@@ -7,7 +7,9 @@ With several photos of the same person (front / side / back, same outfit and
 distance), the body shape is the median across photos and each vertex is
 coloured from the photo that sees it most directly.
 
-Writes private/<name>/identity.json (git-ignored). The photo itself is NOT copied.
+Writes private/<name>/identity.json, appearance.npz and, for the photo texture,
+texture_views.npz plus a cropped copy of each photo (view_<i>.jpg). The whole
+private/ folder is git-ignored; delete private/<name>/ to remove everything.
 Then build the avatar with:  python build_avatar.py --identity private/<name>/identity.json
 
 Photo tips: one person, whole body visible head to toe, standing upright, facing
@@ -30,7 +32,8 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from appearance import best_projector, facing_label, fuse_colors, mirror_map, overlay_image, rasterize_ids, sample_visible
+from appearance import (best_projector, facing_label, fuse_colors, mirror_map, overlay_image, rasterize_ids,
+                        sample_visible, texture_visibility)
 from mhr_common import HERE, MHRModel
 
 SAM_DIR_DEFAULT = HERE / "vendor" / "sam-3d-body"
@@ -57,19 +60,41 @@ def cpu_shim() -> None:
     torch.Tensor.to = to  # type: ignore[method-assign]
 
 
-def load_image(path: Path) -> np.ndarray:
-    """Load as RGB uint8 (what SAM3DBodyEstimator expects for arrays), honouring EXIF rotation; HEIC ok."""
+def load_image(path: Path):
+    """(RGB uint8 array for SAM, at most 1600 px; full-resolution PIL image for the texture).
+
+    SAM3DBodyEstimator expects RGB arrays. EXIF rotation is honoured; HEIC is ok.
+    """
     from PIL import Image, ImageOps
     try:
         import pillow_heif  # noqa: F401
         pillow_heif.register_heif_opener()
     except ImportError:
         pass
-    img = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+    full = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+    img = full
     longest = max(img.size)
     if longest > 1600:  # plenty for body shape; keeps CPU time down
         img = img.resize((round(img.width * 1600 / longest), round(img.height * 1600 / longest)))
-    return np.ascontiguousarray(np.asarray(img))
+    return np.ascontiguousarray(np.asarray(img)), full
+
+
+def save_texture_view(full, uv: np.ndarray, weight: np.ndarray, small_size: tuple[int, int], path: Path,
+                      max_side: int = 2048):
+    """Crop the photo around the visible body; return vertex coordinates in the crop's pixels."""
+    sx, sy = full.width / small_size[0], full.height / small_size[1]
+    uv_full = uv * np.array([sx, sy])
+    seen = uv_full[weight > 0] if (weight > 0).any() else uv_full
+    lo, hi = seen.min(0), seen.max(0)
+    pad = 0.03 * (hi - lo).max()
+    x0, y0 = (int(max(0, v)) for v in np.floor(lo - pad))
+    x1, y1 = int(min(full.width, np.ceil(hi[0] + pad))), int(min(full.height, np.ceil(hi[1] + pad)))
+    crop = full.crop((x0, y0, x1, y1))
+    k = min(1.0, max_side / max(crop.size))
+    if k < 1.0:
+        crop = crop.resize((round(crop.width * k), round(crop.height * k)))
+    crop.save(path, quality=92)
+    return ((uv_full - np.array([x0, y0])) * k).astype(np.float32), crop.size
 
 
 def main() -> None:
@@ -111,7 +136,7 @@ def main() -> None:
     out_dir = HERE / "private" / args.name
     out_dir.mkdir(parents=True, exist_ok=True)
     faces = np.asarray(estimator.faces, np.int64)
-    shapes, scale_sets, heights, samples, views = [], [], [], [], []
+    shapes, scale_sets, heights, samples, views, tex_views = [], [], [], [], [], []
 
     def height_of(shape, scales):
         pose = np.zeros(len(mhr.pose_names), np.float32)
@@ -120,7 +145,7 @@ def main() -> None:
         return float(verts[:, 1].max() - verts[:, 1].min()) / 100
 
     for i, photo in enumerate(args.photos, start=1):
-        img = load_image(photo)
+        img, full = load_image(photo)
         h, w = img.shape[:2]
         started = time.time()
         outputs = estimator.process_one_image(img, bboxes=np.array([[0, 0, w, h]], np.float32), inference_type="body")
@@ -138,7 +163,13 @@ def main() -> None:
         uv, depth = project(posed)
         view = facing_label(posed, nose_index, head_index)
         overlay_image(img, uv, depth, faces, posed).save(out_dir / f"overlay_{i}_{view}.png")
-        colors, weight = sample_visible(img, uv, rasterize_ids(uv, depth, faces, w, h), faces, posed + project.cam_t)
+        ids = rasterize_ids(uv, depth, faces, w, h)
+        colors, weight = sample_visible(img, uv, ids, faces, posed + project.cam_t)
+        face_visible, tex_weight = texture_visibility(img, uv, ids, faces, posed + project.cam_t)
+
+        tex_uv, tex_size = save_texture_view(full, uv, tex_weight, (w, h), out_dir / f"view_{len(shapes) + 1}.jpg")
+        tex_views.append({"uv": tex_uv, "weight": weight.astype(np.float32), "tex_weight": tex_weight,
+                          "face_visible": face_visible, "colors": colors.astype(np.float32), "size": tex_size})
 
         shapes.append(shape)
         scale_sets.append(scales)
@@ -159,6 +190,15 @@ def main() -> None:
     shape_dist = [float(np.linalg.norm(s_ - shape)) for s_ in shapes]
     colors, seen = fuse_colors(samples, faces, mirror_map(rest / 100.0))
     np.savez_compressed(out_dir / "appearance.npz", colors=colors, visible=seen)
+    tex = {"views": np.array(views)}
+    for k_, tv in enumerate(tex_views, start=1):
+        tex.update({f"uv_{k_}": tv["uv"], f"weight_{k_}": tv["weight"], f"colors_{k_}": tv["colors"],
+                    f"tex_weight_{k_}": tv["tex_weight"], f"face_visible_{k_}": tv["face_visible"],
+                    f"size_{k_}": np.array(tv["size"])})
+    np.savez_compressed(out_dir / "texture_views.npz", **tex)
+    for stale in out_dir.glob("view_*.jpg"):  # a previous run with more photos
+        if int(stale.stem.split("_")[1]) > len(tex_views):
+            stale.unlink()
 
     out = {
         "identity": [round(float(v), 6) for v in shape],

@@ -6,10 +6,12 @@ This is an offline Python pipeline that produces a rigged, animated GLB for the 
 |---|---|---|---|---|
 | 0 | `inspect_mhr.py` | MHR model | `out/mhr_inspect.json` (parameter and joint names, probes) | No |
 | 1 | `build_avatar.py` | MHR model (+ optional identity JSON) | rigged GLB with `squat` and `biceps_curl` clips | No |
-| 2 | `reconstruct.py` | one photo | `private/<name>/identity.json` (45 shape + scale values) | **Yes** |
+| 2 | `reconstruct.py` | one or more photos | `private/<name>/`: `identity.json` (45 shape + scale values), colours, photo crops for the texture | **Yes** |
 | 3 | `build_avatar.py --identity …` | identity JSON | `public/models/avatars/<name>.glb` (git-ignored) | No |
 
-Only the **body shape** is taken from the photo. Its pose, the background and the face expression are discarded.
+From the photos the avatar takes its **body shape** and its **look**: the photos are projected onto the body as a texture (`texture.py`; the face always comes from the front photo, so seams fall on the sides of the head and body), and the hairline and hair colour come from the photo colours (`hair.py`). The pose and the background are discarded. The generic body gets a template short haircut.
+
+Seams between photos are least visible when the photos are taken one after another, in the same light, at the same distance. Long hair can't be represented yet (the hair is the scalp pushed outwards).
 
 ## Setup (once, on the Mac)
 
@@ -51,9 +53,9 @@ JPEG and iPhone HEIC both work.
 
 ## Privacy
 
-- Photos, identity files and personal GLBs live in `private/` and `public/models/avatars/`, which are both git-ignored. They are never pushed to GitHub or deployed to Vercel.
+- Photos, photo crops (`view_<i>.jpg`), identity files and personal GLBs live in `private/` and `public/models/avatars/`, which are both git-ignored. They are never pushed to GitHub or deployed to Vercel. A personal GLB **contains the photo texture**: treat it like the photos themselves.
 - Use only photos of people who have agreed, and delete `private/<name>/` when you're done.
-- The avatar is an approximate body shape from a single image. It is not a measurement, and not medical or fitness data.
+- The avatar is an approximate body shape from a few images. It is not a measurement, and not medical or fitness data.
 
 ## Licences
 
@@ -63,6 +65,6 @@ JPEG and iPhone HEIC both work.
 ## Roadmap
 
 1. ~~**Multi-photo reconstruction.**~~ Done. `reconstruct.py front side back …` fuses the shape with a median, reports the height spread, colours each vertex from the view that sees it most head-on, and rejects backdrop and edge samples. Areas no photo sees well borrow their left/right mirror twin's colour. Still open: refining the shape by fitting silhouettes across views, and a fourth photo for the other profile.
-2. **Dumbbells** on MHR avatars, attached to the wrist joints.
+2. ~~**Dumbbells, hair, photo texture.**~~ Done. Still open: blending photos across seams (two UV sets and a custom shader), a separate mesh for long hair.
 3. **In-app flow.** Consented upload, a processing service outside Vercel (CPU is enough: about 25 s inference plus about 1 min bake), short-lived private storage and a delete button.
 4. **Validation.** Real photos of consenting people, compared with tape measurements, before claiming any accuracy.

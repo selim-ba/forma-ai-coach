@@ -135,6 +135,33 @@ def sample_visible(rgb: np.ndarray, uv: np.ndarray, ids: np.ndarray, faces: np.n
     return colors, weight
 
 
+def texture_visibility(rgb: np.ndarray, uv: np.ndarray, ids: np.ndarray, faces: np.ndarray, verts_cam: np.ndarray):
+    """For the photo texture: (per-face visible flag, per-vertex weight).
+
+    Looser than sample_visible: a triangle only has to be the front-most surface somewhere
+    in the photo (id buffer), and a vertex is weighted by how directly the camera sees it,
+    unless its pixel is plain backdrop. No edge window, so areas next to the nose, the
+    chin or the arms stay textured.
+    """
+    n_f = len(faces)
+    face_visible = np.zeros(n_f, bool)
+    face_visible[np.unique(ids[ids > 0]) - 1] = True
+    to_cam = -verts_cam / (np.linalg.norm(verts_cam, axis=1, keepdims=True) + 1e-12)
+    facing = np.sum(vertex_normals(verts_cam, faces) * to_cam, axis=1)
+    seen = np.zeros(len(verts_cam), bool)
+    seen[faces[face_visible].reshape(-1)] = True
+    if seen.any() and facing[seen].mean() < 0:
+        facing = -facing
+    weight = np.clip(facing, 0.0, 1.0)
+    bg = background_color(rgb)
+    if bg is not None:
+        h, w = rgb.shape[:2]
+        x = np.clip(np.round(uv[:, 0]).astype(int), 0, w - 1)
+        y = np.clip(np.round(uv[:, 1]).astype(int), 0, h - 1)
+        weight[np.linalg.norm(rgb[y, x].astype(np.float64) - bg, axis=1) <= 22] = 0.0
+    return face_visible, weight.astype(np.float32)
+
+
 def diffuse(colors: np.ndarray, filled: np.ndarray, faces: np.ndarray, iterations: int = 400) -> np.ndarray:
     """Fill unseen vertices by spreading colours across mesh edges."""
     colors, filled = colors.copy(), filled.copy()

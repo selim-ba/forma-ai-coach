@@ -5,15 +5,21 @@
   "units": "metres",
   "up": "+Y",
   "forward": "+Z",
-  "bytes": 1315700,
+  "bytes": 1537112,
   "vertices": 18439,
   "joints": 127,
   "animatedJoints": {
     "rotation": 33,
     "translation": 1
   },
-  "heightM": 1.727,
+  "heightM": 1.749,
   "palmTwist": -1.6,
+  "hair": {
+    "source": "template",
+    "vertices": 379,
+    "maxThicknessMm": 24.0
+  },
+  "texture": null,
   "clips": [
     {
       "name": "squat",
