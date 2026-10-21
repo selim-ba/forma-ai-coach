@@ -24,13 +24,18 @@ export const CONTROL_SCENE_TOOL = {
   description:
     "Control the Forma 3D exercise viewer. Commands run in order in the user's browser. " +
     "Use select_exercise before seek_phase when switching exercise. Only phases listed for the exercise in the catalog are valid. " +
-    "Set every argument that a command type does not use to null.",
+    "Set every argument that a command type does not use to null. " +
+    "Put the short user-facing answer in `reply`; it is shown as-is if every command is accepted.",
   strict: true,
   parameters: {
     type: "object",
     additionalProperties: false,
-    required: ["commands"],
+    required: ["commands", "reply"],
     properties: {
+      reply: {
+        type: "string",
+        description: "1–3 short sentences for the user, written as if the commands have already run.",
+      },
       commands: {
         type: "array",
         description: "1 to 8 scene commands, executed in order.",
@@ -77,6 +82,8 @@ const FlatCommandSchema = z.object({
 
 export const ControlSceneArgsSchema = z.object({
   commands: z.array(z.unknown()).min(1).max(32),
+  /** Optional so older/partial calls still validate; strict mode always sends it. */
+  reply: z.string().max(2000).optional(),
 });
 
 /**

@@ -18,12 +18,18 @@ function request(body: unknown, headers: Record<string, string> = {}) {
 /** Flat tool-call command as GPT emits it under strict mode. */
 const flat = (c: Record<string, unknown>) => ({ exerciseId: null, view: null, speed: null, phase: null, ...c });
 
-function toolCall(commands: unknown[], callId = "call_1"): ResponseLike {
+function toolCall(commands: unknown[], callId = "call_1", reply?: string): ResponseLike {
   return {
     id: "resp_1",
     output: [
       { type: "reasoning", id: "rs_1", summary: [] },
-      { type: "function_call", id: "fc_1", call_id: callId, name: "control_scene", arguments: JSON.stringify({ commands }) },
+      {
+        type: "function_call",
+        id: "fc_1",
+        call_id: callId,
+        name: "control_scene",
+        arguments: JSON.stringify(reply === undefined ? { commands } : { commands, reply }),
+      },
     ],
   };
 }
@@ -89,6 +95,28 @@ describe("POST /api/coach — OpenAI tool loop", () => {
     expect(input.some((i) => i.type === "reasoning")).toBe(true);
     expect(input.some((i) => i.type === "function_call")).toBe(true);
     expect(second.tool_choice).toBe("none");
+  });
+
+  it("uses the tool's reply and skips the second call when every command is valid", async () => {
+    const { client, create } = fakeClient(
+      toolCall([flat({ type: "set_speed", speed: 0.5 }), flat({ type: "play" })], "call_9", "Playing at half speed."),
+    );
+    const { status, body } = await call({ message: "Play it slowly", scene }, deps({ getClient: () => client }));
+    expect(status).toBe(200);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(body.message).toBe("Playing at half speed.");
+    expect(body.commands).toEqual([{ type: "set_speed", speed: 0.5 }, { type: "play" }]);
+  });
+
+  it("falls back to the explaining follow-up call when a command is rejected, even with a reply", async () => {
+    const { client, create } = fakeClient(
+      toolCall([flat({ type: "seek_phase", phase: "bottom" })], "call_8", "Paused at the bottom."),
+      text("The curl has no bottom marker; it starts with your arms extended."),
+    );
+    const { body } = await call({ message: "Pause at the bottom", scene }, deps({ getClient: () => client }));
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(body.message).toMatch(/no bottom marker/);
+    expect(body.commands).toEqual([]);
   });
 
   it("drops semantically invalid commands (curl has no bottom) and reports them", async () => {
@@ -230,6 +258,9 @@ describe("control_scene tool schema", () => {
   it("is strict and its enums match the app allowlists", () => {
     const items = CONTROL_SCENE_TOOL.parameters.properties.commands.items;
     expect(CONTROL_SCENE_TOOL.strict).toBe(true);
+    expect([...CONTROL_SCENE_TOOL.parameters.required].sort()).toEqual(
+      Object.keys(CONTROL_SCENE_TOOL.parameters.properties).sort(),
+    );
     expect(items.additionalProperties).toBe(false);
     expect([...items.required].sort()).toEqual(Object.keys(items.properties).sort());
     expect(items.properties.type.enum).toEqual([...COMMAND_TYPES]);

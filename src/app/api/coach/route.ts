@@ -4,6 +4,8 @@ import { clientKey, createRateLimiter } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// GPT calls can take several seconds; keep serverless hosts (e.g. Vercel) from cutting them off.
+export const maxDuration = 30;
 
 const rateLimiter = createRateLimiter({
   limit: Number(process.env.COACH_RATE_LIMIT_PER_MIN || 12),

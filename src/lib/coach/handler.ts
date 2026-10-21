@@ -196,6 +196,7 @@ export async function handleCoachRequest(req: Request, deps: CoachDeps): Promise
 
     if (calls.length > 0) {
       const toolOutputs: Record<string, unknown>[] = [];
+      const replies: string[] = [];
       for (const call of calls) {
         if (call.name !== CONTROL_SCENE_TOOL_NAME) {
           rejected.push({ command: call.name, reason: "unknown_tool", detail: "Only control_scene is available." });
@@ -210,6 +211,7 @@ export async function handleCoachRequest(req: Request, deps: CoachDeps): Promise
         }
         const parsedArgs = ControlSceneArgsSchema.safeParse(args);
         const proposed = parsedArgs.success ? parsedArgs.data.commands : [];
+        if (parsedArgs.success && parsedArgs.data.reply?.trim()) replies.push(parsedArgs.data.reply.trim());
         if (!parsedArgs.success) {
           rejected.push({ command: args, reason: "invalid_command", detail: "Tool arguments failed validation." });
         }
@@ -239,13 +241,20 @@ export async function handleCoachRequest(req: Request, deps: CoachDeps): Promise
         });
       }
 
-      // Second turn: give the model the validated tool results and ask for the
-      // user-facing reply. Reasoning + function_call items are passed back as-is.
-      const followUp = await client.responses.create(
-        { ...common, tool_choice: "none", input: [...input, ...first.output, ...toolOutputs] },
-        { signal: controller.signal },
-      );
-      message = outputText(followUp) || message;
+      if (rejected.length === 0 && replies.length > 0) {
+        // Fast path (one round trip): every proposed command validated, so the
+        // reply the model wrote alongside them is accurate as-is.
+        message = replies.join(" ");
+      } else {
+        // Slow path: something was rejected (or no reply was given). Send the
+        // validated tool results back so the model can explain what happened.
+        // Reasoning + function_call items are passed back as-is.
+        const followUp = await client.responses.create(
+          { ...common, tool_choice: "none", input: [...input, ...first.output, ...toolOutputs] },
+          { signal: controller.signal },
+        );
+        message = outputText(followUp) || message;
+      }
     }
 
     if (!message) message = accepted.length ? "Done — take a look." : "I can show a squat or a biceps curl. What would you like to see?";
