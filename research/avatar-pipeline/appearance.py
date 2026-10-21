@@ -16,6 +16,7 @@ def make_projector(cam_t: np.ndarray, focal: float, width: int, height: int):
         p = points + cam_t
         z = np.maximum(p[:, 2], 1e-6)
         return np.stack([focal * p[:, 0] / z + width / 2, focal * p[:, 1] / z + height / 2], axis=1), p[:, 2]
+    project.cam_t = cam_t  # type: ignore[attr-defined]  # posed + cam_t = camera-frame position
     return project
 
 
@@ -78,8 +79,21 @@ def vertex_normals(verts: np.ndarray, faces: np.ndarray) -> np.ndarray:
     return vn / (np.linalg.norm(vn, axis=1, keepdims=True) + 1e-12)
 
 
-def sample_visible(rgb: np.ndarray, uv: np.ndarray, ids: np.ndarray, faces: np.ndarray, verts: np.ndarray):
-    """Per-vertex photo colour and a confidence weight (how directly the camera sees it; 0 = unseen)."""
+def background_color(rgb: np.ndarray, border: int = 12):
+    """Median colour of the image border, or None if the border isn't a plain backdrop."""
+    edge = np.concatenate([rgb[:border].reshape(-1, 3), rgb[-border:].reshape(-1, 3),
+                           rgb[:, :border].reshape(-1, 3), rgb[:, -border:].reshape(-1, 3)]).astype(np.float64)
+    med = np.median(edge, axis=0)
+    spread = np.median(np.linalg.norm(edge - med, axis=1))
+    return med if spread < 12 else None
+
+
+def sample_visible(rgb: np.ndarray, uv: np.ndarray, ids: np.ndarray, faces: np.ndarray, verts_cam: np.ndarray):
+    """Per-vertex photo colour and a confidence weight (how directly the camera sees it; 0 = unseen).
+
+    verts_cam must be in the CAMERA frame (posed vertices + pred_cam_t; camera at the origin).
+    """
+    verts = verts_cam
     h, w = rgb.shape[:2]
     n_v = len(verts)
     visible_faces = np.unique(ids[ids > 0]) - 1
@@ -91,6 +105,21 @@ def sample_visible(rgb: np.ndarray, uv: np.ndarray, ids: np.ndarray, faces: np.n
     if vis.any() and facing[vis].mean() < 0:  # mesh winding is inward: flip the convention
         facing = -facing
     vis &= facing > 0.35  # drop grazing vertices (silhouette edges pick up background)
+
+    # Edge rejection: within a small window around the vertex's pixel there must be no
+    # background and no surface clearly closer to the camera (e.g. an arm in front of the
+    # torso). Misalignment errors concentrate exactly at those image edges.
+    face_depth = verts[faces][:, :, 2].mean(1)
+    r = max(3, int(round(0.004 * h)))
+    xs = np.clip(np.round(uv[:, 0]).astype(int), 0, w - 1)
+    ys = np.clip(np.round(uv[:, 1]).astype(int), 0, h - 1)
+    clean = np.ones(n_v, bool)
+    for dy in range(-r, r + 1, max(1, r // 2)):
+        for dx in range(-r, r + 1, max(1, r // 2)):
+            fid = ids[np.clip(ys + dy, 0, h - 1), np.clip(xs + dx, 0, w - 1)]
+            near_depth = np.where(fid > 0, face_depth[np.maximum(fid - 1, 0)], -np.inf)
+            clean &= (fid > 0) & (near_depth > verts[:, 2] - 0.03)
+    vis &= clean
     x = np.clip(np.round(uv[:, 0]).astype(int), 1, w - 2)
     y = np.clip(np.round(uv[:, 1]).astype(int), 1, h - 2)
     patch = np.zeros((n_v, 3))
@@ -98,6 +127,10 @@ def sample_visible(rgb: np.ndarray, uv: np.ndarray, ids: np.ndarray, faces: np.n
         for dx in (-1, 0, 1):
             patch += rgb[y + dy, x + dx]
     colors = patch / 9.0
+    # Reject samples that are really backdrop (misaligned silhouette edges on a plain background).
+    bg = background_color(rgb)
+    if bg is not None:
+        vis &= np.linalg.norm(colors - bg, axis=1) > 22
     weight = np.where(vis, facing, 0.0)
     return colors, weight
 
@@ -125,18 +158,42 @@ def diffuse(colors: np.ndarray, filled: np.ndarray, faces: np.ndarray, iteration
     return colors
 
 
-def fuse_colors(samples: list[tuple[np.ndarray, np.ndarray]], faces: np.ndarray):
-    """Blend per-view colours, strongly favouring the view that sees each vertex most head-on."""
+def mirror_map(rest: np.ndarray, chunk: int = 512) -> np.ndarray:
+    """Index of each vertex's left/right mirror twin on the (symmetric) rest mesh (x -> -x)."""
+    pts = rest.astype(np.float32)
+    mirrored = pts * np.array([-1.0, 1.0, 1.0], np.float32)
+    sq = (pts ** 2).sum(1)
+    out = np.empty(len(pts), np.int64)
+    for i in range(0, len(pts), chunk):
+        m = mirrored[i:i + chunk]
+        d = (m ** 2).sum(1)[:, None] + sq[None, :] - 2.0 * (m @ pts.T)  # squared distances
+        out[i:i + chunk] = d.argmin(1)
+    return out
+
+
+def fuse_colors(samples: list[tuple[np.ndarray, np.ndarray]], faces: np.ndarray, mirror: np.ndarray | None = None):
+    """Blend per-view colours, strongly favouring the view that sees each vertex most head-on.
+
+    Vertices no photo sees well borrow the colour of their mirror twin when that twin was
+    seen clearly; anything still unseen is filled by diffusion across the mesh.
+    """
     n_v = len(samples[0][0])
     acc = np.zeros((n_v, 3))
     wsum = np.zeros(n_v)
+    best = np.zeros(n_v)
     for colors, weight in samples:
         w = weight ** 4
         acc += colors * w[:, None]
         wsum += w
+        best = np.maximum(best, weight)
     seen = wsum > 1e-6
     fused = np.zeros((n_v, 3))
     fused[seen] = acc[seen] / wsum[seen, None]
+    if mirror is not None:
+        borrow = (best < 0.45) & (best[mirror] >= 0.6)
+        fused[borrow] = fused[mirror[borrow]]
+        best = np.where(borrow, best[mirror], best)
+        seen = seen | borrow
     return np.clip(diffuse(fused, seen, faces), 0, 255).astype(np.uint8), seen
 
 

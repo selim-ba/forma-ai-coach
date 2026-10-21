@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from appearance import best_projector, facing_label, fuse_colors, overlay_image, rasterize_ids, sample_visible
+from appearance import best_projector, facing_label, fuse_colors, mirror_map, overlay_image, rasterize_ids, sample_visible
 from mhr_common import HERE, MHRModel
 
 SAM_DIR_DEFAULT = HERE / "vendor" / "sam-3d-body"
@@ -138,7 +138,7 @@ def main() -> None:
         uv, depth = project(posed)
         view = facing_label(posed, nose_index, head_index)
         overlay_image(img, uv, depth, faces, posed).save(out_dir / f"overlay_{i}_{view}.png")
-        colors, weight = sample_visible(img, uv, rasterize_ids(uv, depth, faces, w, h), faces, posed)
+        colors, weight = sample_visible(img, uv, rasterize_ids(uv, depth, faces, w, h), faces, posed + project.cam_t)
 
         shapes.append(shape)
         scale_sets.append(scales)
@@ -157,7 +157,7 @@ def main() -> None:
     height = height_of(shape, scales)
     spread = (max(heights) - min(heights)) if len(heights) > 1 else 0.0
     shape_dist = [float(np.linalg.norm(s_ - shape)) for s_ in shapes]
-    colors, seen = fuse_colors(samples, faces)
+    colors, seen = fuse_colors(samples, faces, mirror_map(rest / 100.0))
     np.savez_compressed(out_dir / "appearance.npz", colors=colors, visible=seen)
 
     out = {
