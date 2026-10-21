@@ -20,9 +20,9 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Let phones cache the avatar GLB between visits.
+        // Avatar GLBs are regenerated in place: always revalidate (cheap 304 when unchanged).
         source: "/models/:path*",
-        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+        headers: [{ key: "Cache-Control", value: "public, max-age=0, must-revalidate" }],
       },
       {
         source: "/:path*",

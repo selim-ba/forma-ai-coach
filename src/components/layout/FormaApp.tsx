@@ -23,6 +23,7 @@ export function FormaApp() {
   useVisualViewport();
   const scene = useSceneStore((s) => s.scene);
   const avatarStatus = useSceneStore((s) => s.avatar.status);
+  const avatarLabel = useSceneStore((s) => s.avatarSource.label);
   const exercise = EXERCISES[scene.exerciseId];
 
   return (
@@ -70,7 +71,7 @@ export function FormaApp() {
             {exercise.title} <span className="font-normal capitalize text-ink-muted">· {exercise.level}</span>
           </p>
           <p className="text-[11px] leading-tight text-ink-muted/80">
-            Drag to rotate · generic mannequin · not medical advice
+            Drag to rotate · {avatarLabel} · not medical advice
           </p>
         </div>
       </main>

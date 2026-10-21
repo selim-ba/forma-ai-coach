@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { DEFAULT_AVATAR, type AvatarSource } from "@/lib/avatar/source";
 import type { CommandResult, CommandSource, SceneState } from "@/types/scene";
 import { describeCommand } from "./commands";
 import { applyCommands, INITIAL_SCENE } from "./reducer";
@@ -18,10 +19,12 @@ export type AvatarStatus = { status: "loading" | "ready" | "error"; error?: stri
 type SceneStore = {
   scene: SceneState;
   avatar: AvatarStatus;
+  avatarSource: AvatarSource;
   log: LogEntry[];
   /** Validate and apply commands exactly once, recording each in the action log. */
   dispatch: (commands: readonly unknown[], source: CommandSource) => CommandResult[];
   setAvatarStatus: (status: AvatarStatus) => void;
+  setAvatarSource: (source: AvatarSource) => void;
   logNote: (source: CommandSource, label: string, ok: boolean, detail?: string) => void;
 };
 
@@ -38,6 +41,7 @@ function labelFor(result: CommandResult): string {
 export const useSceneStore = create<SceneStore>((set, get) => ({
   scene: INITIAL_SCENE,
   avatar: { status: "loading" },
+  avatarSource: DEFAULT_AVATAR,
   log: [],
   dispatch: (commands, source) => {
     const { state, results } = applyCommands(get().scene, commands);
@@ -56,6 +60,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
     return results;
   },
   setAvatarStatus: (avatar) => set({ avatar }),
+  setAvatarSource: (avatarSource) => set({ avatarSource }),
   logNote: (source, label, ok, detail) =>
     set({
       log: [

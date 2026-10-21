@@ -2,9 +2,9 @@
 
 import { Canvas } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
-import { Component, Suspense, useMemo, useState, type ReactNode } from "react";
+import { Component, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import * as THREE from "three";
-import { MODEL_URL } from "@/lib/exercises/catalog";
+import { resolveAvatar } from "@/lib/avatar/source";
 import { useSceneStore } from "@/lib/scene/store";
 import { AvatarModel } from "./AvatarModel";
 import { CameraControls } from "./CameraControls";
@@ -44,7 +44,7 @@ function FloorShadow() {
   );
 }
 
-class ViewerErrorBoundary extends Component<{ children: ReactNode; onRetry: () => void }, { error: Error | null }> {
+class ViewerErrorBoundary extends Component<{ children: ReactNode; url: string; onRetry: () => void }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) {
     return { error };
@@ -61,7 +61,7 @@ class ViewerErrorBoundary extends Component<{ children: ReactNode; onRetry: () =
           action={{
             label: "Retry",
             onClick: () => {
-              useGLTF.clear(MODEL_URL);
+              useGLTF.clear(this.props.url);
               useSceneStore.getState().setAvatarStatus({ status: "loading" });
               this.setState({ error: null });
               this.props.onRetry();
@@ -100,6 +100,10 @@ function hasWebGL() {
 export default function AvatarCanvas() {
   const [attempt, setAttempt] = useState(0);
   const [webgl] = useState(() => hasWebGL());
+  const [source] = useState(() => resolveAvatar(window.location.search));
+  useEffect(() => {
+    useSceneStore.getState().setAvatarSource(source);
+  }, [source]);
   const status = useSceneStore((s) => s.avatar.status);
 
   if (!webgl) {
@@ -112,7 +116,7 @@ export default function AvatarCanvas() {
   }
 
   return (
-    <ViewerErrorBoundary onRetry={() => setAttempt((a) => a + 1)}>
+    <ViewerErrorBoundary url={source.url} onRetry={() => setAttempt((a) => a + 1)}>
       <Canvas
         key={attempt}
         className="!absolute inset-0"
@@ -131,7 +135,7 @@ export default function AvatarCanvas() {
         <directionalLight position={[-3, 2.5, -2]} intensity={0.9} color="#ffd9c4" />
         <FloorShadow />
         <Suspense fallback={null}>
-          <AvatarModel />
+          <AvatarModel url={source.url} />
         </Suspense>
         <CameraControls />
       </Canvas>

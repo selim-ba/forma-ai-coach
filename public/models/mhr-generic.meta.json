@@ -1,0 +1,55 @@
+{
+  "generator": "research/avatar-pipeline/build_avatar.py",
+  "source": "MHR (Apache-2.0)",
+  "personal": false,
+  "units": "metres",
+  "up": "+Y",
+  "forward": "+Z",
+  "bytes": 1288080,
+  "vertices": 18439,
+  "joints": 127,
+  "animatedJoints": {
+    "rotation": 33,
+    "translation": 1
+  },
+  "heightM": 1.727,
+  "palmTwist": -1.6,
+  "clips": [
+    {
+      "name": "squat",
+      "duration": 4.0,
+      "fps": 30,
+      "markers": {
+        "start": 0,
+        "middle": 0.2625,
+        "bottom": 0.5
+      },
+      "qa": {
+        "ankleDriftM": 0.00018,
+        "lowestVertexM": [
+          -0.0001,
+          0.001
+        ],
+        "minWristToThighAxisM": 0.261
+      }
+    },
+    {
+      "name": "biceps_curl",
+      "duration": 4.0,
+      "fps": 30,
+      "markers": {
+        "start": 0,
+        "middle": 0.225,
+        "top": 0.425
+      },
+      "qa": {
+        "ankleDriftM": 0.0,
+        "lowestVertexM": [
+          0.0,
+          0.0
+        ],
+        "minWristToThighAxisM": 0.215
+      }
+    }
+  ]
+}

@@ -20,3 +20,12 @@ research/**/data/
 research/**/outputs/
 *.ckpt
 *.safetensors
+
+# MHR / SAM 3D Body pipeline: personal data and large model files stay local
+research/avatar-pipeline/private/
+research/avatar-pipeline/.venv/
+research/avatar-pipeline/checkpoints/
+public/models/avatars/
+*.ckpt
+*.pt
+__pycache__/

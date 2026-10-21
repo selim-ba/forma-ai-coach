@@ -4,7 +4,7 @@ import { useAnimations, useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import * as THREE from "three";
-import { EXERCISES, MODEL_URL } from "@/lib/exercises/catalog";
+import { EXERCISES } from "@/lib/exercises/catalog";
 import { playhead, useSceneStore } from "@/lib/scene/store";
 import type { ExerciseId, SceneState } from "@/types/scene";
 
@@ -23,7 +23,12 @@ function syncMixer(actions: Actions, mixer: THREE.AnimationMixer, model: THREE.O
   const action = actions[exercise.clipName];
   if (!action) return;
 
-  if (applied.exerciseId !== state.exerciseId) {
+  // Re-activate if the action was stopped/uncached behind our back (e.g. React StrictMode's
+  // dev-only unmount/remount runs drei's cleanup, which uncaches every action).
+  const deactivated = applied.exerciseId === state.exerciseId && !action.isScheduled();
+  if (deactivated) applied.seekNonce = -1; // re-apply the latest seek after reactivation
+
+  if (applied.exerciseId !== state.exerciseId || deactivated) {
     for (const other of Object.values(actions)) {
       if (other && other !== action) other.stop();
     }
@@ -60,9 +65,9 @@ function disableFrustumCulling(model: THREE.Object3D) {
  * Exactly one AnimationAction is active at a time. Scene state is the source
  * of truth; this component only mirrors it imperatively.
  */
-export function AvatarModel() {
+export function AvatarModel({ url }: { url: string }) {
   const group = useRef<THREE.Group>(null);
-  const { scene: model, animations } = useGLTF(MODEL_URL);
+  const { scene: model, animations } = useGLTF(url);
   const { actions, mixer } = useAnimations(animations, group);
   const scene = useSceneStore((s) => s.scene);
   const setAvatarStatus = useSceneStore((s) => s.setAvatarStatus);
@@ -87,6 +92,13 @@ export function AvatarModel() {
     syncMixer(actions, mixer, model, { exerciseId, speed, seek, playing }, applied.current);
   }, [exerciseId, speed, seek, playing, actions, mixer, model]);
 
+  // Dev-only inspection handle for debugging avatars in the browser console.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") {
+      (window as unknown as { __forma?: unknown }).__forma = { actions, mixer, model, applied };
+    }
+  }, [actions, mixer, model]);
+
   useFrame(() => {
     const action = actions[EXERCISES[scene.exerciseId].clipName];
     if (!action) return;
@@ -102,4 +114,3 @@ export function AvatarModel() {
   );
 }
 
-useGLTF.preload(MODEL_URL);
