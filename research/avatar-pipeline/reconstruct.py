@@ -1,6 +1,11 @@
-"""Step 2: one photo -> approximate MHR body shape (identity + proportions). No pose is kept.
+"""Step 2: one or more photos -> approximate MHR body shape (identity + proportions). No pose is kept.
 
-    python reconstruct.py path/to/photo.jpg --name me
+    python reconstruct.py private/me/front.jpg --name me
+    python reconstruct.py private/me/front.png private/me/side.png private/me/back.png --name me
+
+With several photos of the same person (front / side / back, same outfit and
+distance), the body shape is the median across photos and each vertex is
+coloured from the photo that sees it most directly.
 
 Writes private/<name>/identity.json (git-ignored). The photo itself is NOT copied.
 Then build the avatar with:  python build_avatar.py --identity private/<name>/identity.json
@@ -25,7 +30,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from appearance import best_projector, overlay_image, rasterize_ids, sample_vertex_colors
+from appearance import best_projector, facing_label, fuse_colors, overlay_image, rasterize_ids, sample_visible
 from mhr_common import HERE, MHRModel
 
 SAM_DIR_DEFAULT = HERE / "vendor" / "sam-3d-body"
@@ -69,7 +74,7 @@ def load_image(path: Path) -> np.ndarray:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("photo", type=Path)
+    ap.add_argument("photos", type=Path, nargs="+", help="one or more photos of the same person")
     ap.add_argument("--name", required=True, help="lowercase letters, digits and dashes, e.g. 'selim'")
     ap.add_argument("--sam-dir", type=Path, default=SAM_DIR_DEFAULT, help="clone of facebookresearch/sam-3d-body")
     ap.add_argument("--checkpoint-dir", type=Path, default=CKPT_DIR_DEFAULT)
@@ -93,57 +98,91 @@ def main() -> None:
     estimator = SAM3DBodyEstimator(sam_3d_body_model=model, model_cfg=cfg)
     print(f"  model loaded in {time.time() - started:.0f}s")
 
-    img = load_image(args.photo)
-    h, w = img.shape[:2]
-    started = time.time()
-    outputs = estimator.process_one_image(img, bboxes=np.array([[0, 0, w, h]], np.float32), inference_type="body")
-    print(f"  inference in {time.time() - started:.0f}s")
-    if not outputs:
-        sys.exit("No person found. Use a full-body photo where the person fills most of the frame.")
-    person = outputs[0]
-
-    shape = np.asarray(person["shape_params"], np.float32).reshape(-1)
-    model_params = np.asarray(person["mhr_model_params"], np.float32).reshape(-1)
     mhr = MHRModel()
     first_scale = mhr.pose_names.index("scale_eye_width")
     scale_names = mhr.pose_names[first_scale:]
-    scales = model_params[first_scale:first_scale + len(scale_names)]
-    if shape.shape[0] != mhr.identity_count or len(scales) != len(scale_names):
-        sys.exit(f"Unexpected output sizes: shape {shape.shape}, scales {scales.shape}")
 
-    # Sanity check: rest-pose height of this body.
-    pose = np.zeros(len(mhr.pose_names), np.float32)
-    pose[first_scale:] = scales
-    verts, _ = mhr.evaluate(pose, shape)
-    height = float(verts[:, 1].max() - verts[:, 1].min()) / 100
+    # Landmark vertices on the generic rest mesh, to tell front / side / back views apart.
+    rest, _ = mhr.evaluate()
+    head = np.flatnonzero(rest[:, 1] > rest[:, 1].max() - 18)  # top ~18 cm
+    nose_index = int(head[np.argmax(rest[head, 2])])
+    head_index = int(head[np.argmin(rest[head, 2])])  # back of the head: nose - back = facing direction
 
     out_dir = HERE / "private" / args.name
     out_dir.mkdir(parents=True, exist_ok=True)
+    faces = np.asarray(estimator.faces, np.int64)
+    shapes, scale_sets, heights, samples, views = [], [], [], [], []
+
+    def height_of(shape, scales):
+        pose = np.zeros(len(mhr.pose_names), np.float32)
+        pose[first_scale:] = scales
+        verts, _ = mhr.evaluate(pose, shape)
+        return float(verts[:, 1].max() - verts[:, 1].min()) / 100
+
+    for i, photo in enumerate(args.photos, start=1):
+        img = load_image(photo)
+        h, w = img.shape[:2]
+        started = time.time()
+        outputs = estimator.process_one_image(img, bboxes=np.array([[0, 0, w, h]], np.float32), inference_type="body")
+        if not outputs:
+            print(f"  ✗ {photo.name}: no person found, skipped")
+            continue
+        person = outputs[0]
+        shape = np.asarray(person["shape_params"], np.float32).reshape(-1)
+        scales = np.asarray(person["mhr_model_params"], np.float32).reshape(-1)[first_scale:first_scale + len(scale_names)]
+        if shape.shape[0] != mhr.identity_count or len(scales) != len(scale_names):
+            sys.exit(f"Unexpected output sizes: shape {shape.shape}, scales {scales.shape}")
+
+        posed = np.asarray(person["pred_vertices"], np.float64).reshape(-1, 3)
+        err, project, _signs = best_projector(person, w, h)
+        uv, depth = project(posed)
+        view = facing_label(posed, nose_index, head_index)
+        overlay_image(img, uv, depth, faces, posed).save(out_dir / f"overlay_{i}_{view}.png")
+        colors, weight = sample_visible(img, uv, rasterize_ids(uv, depth, faces, w, h), faces, posed)
+
+        shapes.append(shape)
+        scale_sets.append(scales)
+        heights.append(height_of(shape, scales))
+        samples.append((colors, weight))
+        views.append(view)
+        print(f"  {photo.name}: {view} view, height {heights[-1]:.2f} m, keypoint fit {err:.1f}px, "
+              f"{(weight > 0).mean()*100:.0f}% of vertices seen, {time.time() - started:.0f}s")
+
+    if not shapes:
+        sys.exit("No person found in any photo. Use full-body photos where the person fills most of the frame.")
+
+    # Fuse: element-wise median is robust to one bad view.
+    shape = np.median(np.stack(shapes), axis=0)
+    scales = np.median(np.stack(scale_sets), axis=0)
+    height = height_of(shape, scales)
+    spread = (max(heights) - min(heights)) if len(heights) > 1 else 0.0
+    shape_dist = [float(np.linalg.norm(s_ - shape)) for s_ in shapes]
+    colors, seen = fuse_colors(samples, faces)
+    np.savez_compressed(out_dir / "appearance.npz", colors=colors, visible=seen)
+
     out = {
         "identity": [round(float(v), 6) for v in shape],
         "scales": {n: round(float(v), 6) for n, v in zip(scale_names, scales)},
         "estimatedHeightM": round(height, 3),
-        "source": "SAM 3D Body (facebook/sam-3d-body-dinov3, SAM License), single photo, body decoder",
+        "views": views,
+        "perViewHeightM": [round(x, 3) for x in heights],
+        "perViewShapeDistance": [round(x, 3) for x in shape_dist],
+        "source": f"SAM 3D Body (facebook/sam-3d-body-dinov3, SAM License), {len(shapes)} photo(s), body decoder, median fusion",
         "created": dt.datetime.now().isoformat(timespec="seconds"),
-        "note": "Approximate body shape from one image. Not a measurement. Delete this folder to remove it.",
+        "note": "Approximate body shape from photos. Not a measurement. Delete this folder to remove it.",
     }
     path = out_dir / "identity.json"
     path.write_text(json.dumps(out, indent=2) + "\n")
 
-    # ---- Diagnostics + appearance (both stay in the git-ignored private folder) ----
-    posed = np.asarray(person["pred_vertices"], np.float64).reshape(-1, 3)
-    faces = np.asarray(estimator.faces, np.int64)
-    err, project, signs = best_projector(person, w, h)
-    uv, depth = project(posed)
-    print(f"  projection check: median 2D keypoint error {err:.1f}px (image {w}x{h}, signs {signs})")
-    overlay_image(img, uv, depth, faces, posed).save(out_dir / "overlay.png")
-    ids = rasterize_ids(uv, depth, faces, w, h)
-    colors, visible = sample_vertex_colors(img, uv, ids, faces, posed)
-    np.savez_compressed(out_dir / "appearance.npz", colors=colors, visible=visible)
-    print(f"  wrote {(out_dir / 'overlay.png').relative_to(HERE)} and appearance.npz "
-          f"({visible.mean()*100:.0f}% of vertices seen in the photo; the rest is filled in)")
-    print(f"✓ wrote {path.relative_to(HERE)} — model height {height:.2f} m "
-          "(absolute scale from one photo is approximate; proportions are what matter)")
+    print(f"✓ wrote {path.relative_to(HERE)} from {len(shapes)} photo(s) ({', '.join(views)}), "
+          f"fused height {height:.2f} m, {seen.mean()*100:.0f}% of the body seen in at least one photo")
+    if len(shapes) > 1:
+        print(f"  consistency: heights {min(heights):.2f}–{max(heights):.2f} m (spread {spread*100:.0f} cm), "
+              f"shape distance to fused {', '.join(f'{d:.2f}' for d in shape_dist)}")
+        if spread > 0.06 or max(shape_dist) > 2.0:
+            print("  ⚠ the photos disagree noticeably — check they show the same body, outfit and camera distance")
+    if views.count("front") > 1 or ("back" not in views and len(views) >= 3):
+        print("  ⚠ expected one front, one side and one back view — check the overlay_*.png images")
     print(f"  next: python build_avatar.py --identity {path.relative_to(HERE)}")
 
 

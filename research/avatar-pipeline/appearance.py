@@ -70,38 +70,45 @@ def overlay_image(rgb: np.ndarray, uv: np.ndarray, depth: np.ndarray, faces: np.
     return out
 
 
-def sample_vertex_colors(rgb: np.ndarray, uv: np.ndarray, ids: np.ndarray, faces: np.ndarray,
-                         verts: np.ndarray, camera_dir_z: float = 1.0):
-    """Colour each vertex from the photo where it is visible; diffuse into hidden areas."""
+def vertex_normals(verts: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    vn = np.zeros_like(verts)
+    fn = np.cross(verts[faces[:, 1]] - verts[faces[:, 0]], verts[faces[:, 2]] - verts[faces[:, 0]])
+    for k in range(3):
+        np.add.at(vn, faces[:, k], fn)
+    return vn / (np.linalg.norm(vn, axis=1, keepdims=True) + 1e-12)
+
+
+def sample_visible(rgb: np.ndarray, uv: np.ndarray, ids: np.ndarray, faces: np.ndarray, verts: np.ndarray):
+    """Per-vertex photo colour and a confidence weight (how directly the camera sees it; 0 = unseen)."""
     h, w = rgb.shape[:2]
     n_v = len(verts)
     visible_faces = np.unique(ids[ids > 0]) - 1
     vis = np.zeros(n_v, bool)
     vis[faces[visible_faces].reshape(-1)] = True
-    # Vertex normals: drop grazing vertices (silhouette edges pick up background).
-    vn = np.zeros_like(verts)
-    fn = np.cross(verts[faces[:, 1]] - verts[faces[:, 0]], verts[faces[:, 2]] - verts[faces[:, 0]])
-    for k in range(3):
-        np.add.at(vn, faces[:, k], fn)
-    vn /= np.linalg.norm(vn, axis=1, keepdims=True) + 1e-12
-    facing = -vn[:, 2] * camera_dir_z  # camera looks along +Z; outward normals point to -Z when facing it
+    # Direction from each vertex to the camera (camera at the origin of the posed frame).
+    to_cam = -verts / (np.linalg.norm(verts, axis=1, keepdims=True) + 1e-12)
+    facing = np.sum(vertex_normals(verts, faces) * to_cam, axis=1)
     if vis.any() and facing[vis].mean() < 0:  # mesh winding is inward: flip the convention
         facing = -facing
-    vis &= facing > 0.35
+    vis &= facing > 0.35  # drop grazing vertices (silhouette edges pick up background)
     x = np.clip(np.round(uv[:, 0]).astype(int), 1, w - 2)
     y = np.clip(np.round(uv[:, 1]).astype(int), 1, h - 2)
     patch = np.zeros((n_v, 3))
     for dy in (-1, 0, 1):
         for dx in (-1, 0, 1):
             patch += rgb[y + dy, x + dx]
-    colors = np.zeros((n_v, 3))
-    colors[vis] = patch[vis] / 9.0
-    filled = vis.copy()
+    colors = patch / 9.0
+    weight = np.where(vis, facing, 0.0)
+    return colors, weight
 
-    # Diffuse colours across mesh edges into unseen vertices (back, under arms, top of head).
+
+def diffuse(colors: np.ndarray, filled: np.ndarray, faces: np.ndarray, iterations: int = 400) -> np.ndarray:
+    """Fill unseen vertices by spreading colours across mesh edges."""
+    colors, filled = colors.copy(), filled.copy()
+    n_v = len(colors)
     e = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
     e = np.concatenate([e, e[:, ::-1]])
-    for _ in range(400):
+    for _ in range(iterations):
         todo = ~filled
         if not todo.any():
             break
@@ -113,5 +120,40 @@ def sample_vertex_colors(rgb: np.ndarray, uv: np.ndarray, ids: np.ndarray, faces
         new = cnt > 0
         colors[new] = acc[new] / cnt[new, None]
         filled |= new
-    colors[~filled] = colors[filled].mean(0) if filled.any() else 200
-    return np.clip(colors, 0, 255).astype(np.uint8), vis
+    if (~filled).any():
+        colors[~filled] = colors[filled].mean(0) if filled.any() else 200
+    return colors
+
+
+def fuse_colors(samples: list[tuple[np.ndarray, np.ndarray]], faces: np.ndarray):
+    """Blend per-view colours, strongly favouring the view that sees each vertex most head-on."""
+    n_v = len(samples[0][0])
+    acc = np.zeros((n_v, 3))
+    wsum = np.zeros(n_v)
+    for colors, weight in samples:
+        w = weight ** 4
+        acc += colors * w[:, None]
+        wsum += w
+    seen = wsum > 1e-6
+    fused = np.zeros((n_v, 3))
+    fused[seen] = acc[seen] / wsum[seen, None]
+    return np.clip(diffuse(fused, seen, faces), 0, 255).astype(np.uint8), seen
+
+
+def sample_vertex_colors(rgb, uv, ids, faces, verts):
+    """Single-view convenience wrapper."""
+    return fuse_colors([sample_visible(rgb, uv, ids, faces, verts)], faces)
+
+
+def facing_label(verts: np.ndarray, nose_index: int, head_index: int) -> str:
+    """Is the person facing the camera, facing away, or side-on? (camera looks along +Z).
+
+    head_index is the back of the head, so nose - back points where the face points.
+    """
+    d = verts[nose_index] - verts[head_index]
+    d /= np.linalg.norm(d) + 1e-12
+    if d[2] < -0.5:
+        return "front"
+    if d[2] > 0.5:
+        return "back"
+    return "side"
