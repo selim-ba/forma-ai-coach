@@ -26,6 +26,29 @@ hf download facebook/sam-3d-body-dinov3 --local-dir checkpoints/sam-3d-body-dino
 
 `checkpoints/` and `.venv/` are git-ignored. The download includes `assets/mhr_model.pt`, which steps 0, 1 and 3 use.
 
+## Step 2 setup (photo → body shape)
+
+```bash
+git clone https://github.com/facebookresearch/sam-3d-body.git vendor/sam-3d-body   # git-ignored
+uv pip install -r requirements-sam.txt
+```
+
+This runs on the CPU with no detectron2: the whole photo is used as the person's box, so crop it to the person. The first run fetches DINOv3's model *code* from GitHub through `torch.hub`. The weights come from the checkpoint you already downloaded.
+
+```bash
+python reconstruct.py private/me/photo.jpg --name me     # → private/me/identity.json
+python build_avatar.py --identity private/me/identity.json   # → public/models/avatars/me.glb
+# open http://localhost:3000/?avatar=me
+```
+
+For a good photo:
+- one person, head to toe in frame, standing upright and facing the camera
+- arms slightly away from the body
+- fitted clothes and a plain background
+- camera at about hip height
+
+JPEG and iPhone HEIC both work.
+
 ## Privacy
 
 - Photos, identity files and personal GLBs live in `private/` and `public/models/avatars/`, which are both git-ignored. They are never pushed to GitHub or deployed to Vercel.

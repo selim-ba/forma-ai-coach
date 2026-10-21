@@ -1,0 +1,15 @@
+# Step 2 (photo -> body shape) on top of requirements.txt. CPU-only, no detectron2 needed.
+torchvision
+pytorch-lightning
+opencv-python
+pillow
+pillow-heif        # reads iPhone HEIC photos directly
+yacs
+omegaconf
+einops
+timm
+roma
+braceexpand
+# Imported by DINOv3 hub code (fetched by torch.hub at model load)
+termcolor
+torchmetrics

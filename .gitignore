@@ -29,3 +29,4 @@ public/models/avatars/
 *.ckpt
 *.pt
 __pycache__/
+research/avatar-pipeline/vendor/
