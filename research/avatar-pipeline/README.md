@@ -59,3 +59,13 @@ JPEG and iPhone HEIC both work.
 
 - MHR: Apache-2.0. Parts of the GLB writer follow MHR's `web-viewer/exporters.py`.
 - SAM 3D Body code and weights: Meta's "SAM License". Read it before any distribution or commercial use. Publications must acknowledge it, and redistributing the weights requires including the licence.
+
+## Roadmap
+
+1. **Multi-photo reconstruction.** SAM 3D Body reads one image at a time, but every result shares the MHR identity space.
+   - Shape: run front, side and back photos, then fuse identity and scales with a robust median. Later, refine by fitting silhouettes across all views.
+   - Colours: per vertex, sample from the view that sees it most directly, instead of diffusing into unseen areas.
+   - Consistency: report the spread between views, and warn when it is too large to trust.
+2. **Dumbbells** on MHR avatars, attached to the wrist joints.
+3. **In-app flow.** Consented upload, a processing service outside Vercel (CPU is enough: about 25 s inference plus about 1 min bake), short-lived private storage and a delete button.
+4. **Validation.** Real photos of consenting people, compared with tape measurements, before claiming any accuracy.
