@@ -2,7 +2,7 @@
 
 > An iPhone-first, interactive 3D exercise demonstrator powered by GPT-6.1 Sol.
 
-**Status:** MVP specification / not yet implemented  
+**Status:** MVP in progress — generic-avatar demo working on iPhone 13 over LAN; HTTPS deploy pending. See [Implementation status](#implementation-status).  
 **Target device:** iPhone 13 (Safari, Add to Home Screen)  
 **Development device:** MacBook Pro M4 Pro  
 **Budget:** 20 engineering hours  
@@ -69,7 +69,7 @@ iPhone photos ──> SAM 3D Body GPU inference ──> MHR identity/rig ──>
 
 **Important:** `SAM 3D Body` is **not** a runtime requirement for the MVP. Only introduce it after generic avatar playback and GPT orchestration are tested. This avoids making the demo dependent on a CUDA-oriented research environment.
 
-## Repository structure (to create)
+## Repository structure
 
 ```text
 forma/
@@ -123,39 +123,56 @@ forma/
     └── sam3d-mhr/README.md       # optional independent research spike
 ```
 
-Files describing future implementation are design targets; this README does not claim the source tree currently exists.
+Implementation notes: both clips live in one shared-rig GLB (`public/models/forma-mannequin.glb`) instead of separate `public/motions/*.glb` files. The mannequin and its motions are generated from `src/lib/avatar/`. The coach logic is in `src/lib/coach/handler.ts`, so it can be unit-tested; `src/app/api/coach/route.ts` only wires it up.
 
-## Installation (after source is implemented)
+## Quick start
 
-### Prerequisites
-- Node.js current supported LTS, npm, Git.
-- An OpenAI API key with access to `gpt-6.1-sol`.
-- Blender (optional, for rigging/retargeting).
-- iPhone 13 with Safari and access to deployed HTTPS app.
+Prerequisites: Node.js 20.9+ (current LTS recommended), npm and Git. You only need an OpenAI API key with access to `gpt-6.1-sol` for the real coach.
 
 ```bash
-npx create-next-app@latest forma --typescript --tailwind --eslint --app --src-dir --import-alias '@/*'
-cd forma
-npm install three @react-three/fiber @react-three/drei openai zod zustand lucide-react
-npm install -D @types/three vitest @testing-library/react @testing-library/jest-dom
+npm install
+cp .env.example .env.local      # add OPENAI_API_KEY, or set COACH_MODE=mock
+npm run dev                     # http://localhost:3000
 ```
 
-Install versions compatible with the generated React/Next.js versions and commit the lockfile; do not use floating versions for deployment.
+Without an API key, the app still works as a manual 3D viewer, and the coach shows **Offline**. `npm run dev:mock` runs a deterministic keyword-based "mock" coach, labelled *Mock* in the UI. Use it for rehearsing the demo offline and for automated tests.
 
-Create `.env.local`:
-
-```dotenv
-OPENAI_API_KEY=replace_me
-OPENAI_MODEL=gpt-6.1-sol
-```
+| Command | What it does |
+|---|---|
+| `npm run check` | Typecheck + lint + unit tests + asset validation |
+| `npm test` | Vitest: reducer, catalog ↔ clip markers, `/api/coach` tool loop with a fake OpenAI client, the plan's 8 test prompts against the mock coach |
+| `npm run coach:eval` | Sends the plan's 8 test prompts to a running app (`npm run dev`) and checks the resulting scene, validity and latency. With `OPENAI_API_KEY` set, this is the live GPT-6.1 gate |
+| `npm run assets:build` | Regenerates the mannequin GLB and runs per-frame motion QA (feet planted, floor contact, no hand/torso/thigh penetration) |
+| `npm run assets:validate` | Checks the GLB container, rig, bones, clips, durations, units and floor contact |
+| `npm run test:e2e` | Playwright at the iPhone 13 viewport against `next start` with the mock coach. Run `npx playwright install webkit chromium` and `npm run build` first |
 
 Never prefix secrets with `NEXT_PUBLIC_` and never commit `.env.local`.
 
-```bash
-npm run dev
-```
+### Testing on an iPhone
 
-Open `http://localhost:3000` on the MacBook. For iPhone testing use a deployed HTTPS preview (recommended). If testing over LAN, mobile-browser secure-context restrictions may affect microphone and camera features; plain HTTP on a LAN address is not equivalent to HTTPS.
+- **Same Wi-Fi (quick):** run `npm run dev -- -H 0.0.0.0`, find the Mac's IP with `ipconfig getifaddr en0`, then open `http://<mac-ip>:3000` in Safari on the iPhone. `next.config.ts` allows the Mac's own LAN addresses as dev origins; without that, Next.js 16 blocks the dev JavaScript and the page appears frozen.
+- **HTTPS (required for the final test and Home Screen install):** deploy, for example on Vercel. Set `OPENAI_API_KEY`, `OPENAI_MODEL` and `OPENAI_REASONING_EFFORT=low` as **server** environment variables.
+
+## Implementation status
+
+Last updated 2026-10-21.
+
+| Milestone | State | Evidence |
+|---|---|---|
+| 0–2 Scaffold + mobile shell | Done | Next.js 16 App Router; fixed shell sized to the visual viewport; safe areas; landscape two-column layout |
+| 2–5 Canvas, avatar, orbit | Done | Procedural rigged mannequin (`ASSETS.md`), 584 KiB GLB; touch orbit; front/side/¾ presets; DPR capped at 2; no real-time shadows |
+| 5–8 Squat + playback | Done | Play/pause/replay, 0.5×/1×, seek while paused; one active `AnimationAction` |
+| 8–10 Curl + catalog + phases | Done | Shared skeleton, no bind-pose glitch on switch; markers tested against the clips |
+| 10–13 API route + GPT-6.1 Sol | Done | Responses API tool loop, strict tool schema, Zod on server and client, rate limit, input caps. **Live `coach:eval`: 8/8 valid**, median latency about 5.1 s |
+| 13–15 Chat + reducer | Done | Commands applied once, visible in the Actions log; 38/38 unit tests |
+| 15–17 Device testing, errors | Mostly done | Physical iPhone over LAN: touch rotation, controls, keyboard, landscape, smooth playback and the GPT demo script all pass. Still to do: Airplane-mode check, test over mobile data |
+| 17–19 Polish, deploy | Pending | PWA manifest and generated icons are in place; HTTPS deploy not done yet |
+| 19–20 Rehearsal | Pending | Rehearse twice on the deployed URL and record a backup video |
+
+Known follow-ups:
+- Merge the coach's reply into the tool call so commands need one GPT round trip instead of two (target about 2–3 s).
+- Have a qualified coach review the cues and motions; the catalog marks them `pending_expert_review`.
+- Not implemented: voice, body-shape presets, and SAM 3D Body / MHR personalisation (see `research/sam3d-mhr/`).
 
 ## Assets and rigging rules
 

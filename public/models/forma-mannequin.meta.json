@@ -1,0 +1,92 @@
+{
+  "generator": "scripts/build-mannequin.ts",
+  "license": "Original procedural asset, part of this repository (see ASSETS.md).",
+  "units": "metres",
+  "up": "+Y",
+  "forward": "+Z",
+  "bindPose": "standing, arms hanging straight down",
+  "bytes": 598212,
+  "meshes": [
+    "Mannequin",
+    "Dumbbells"
+  ],
+  "vertexCount": 8399,
+  "bones": [
+    "Root",
+    "Hips",
+    "Spine",
+    "Chest",
+    "Neck",
+    "Head",
+    "LeftUpperArm",
+    "LeftLowerArm",
+    "LeftHand",
+    "RightUpperArm",
+    "RightLowerArm",
+    "RightHand",
+    "LeftUpperLeg",
+    "LeftLowerLeg",
+    "LeftFoot",
+    "RightUpperLeg",
+    "RightLowerLeg",
+    "RightFoot"
+  ],
+  "boundsBindPose": {
+    "min": [
+      -0.269,
+      0,
+      -0.115
+    ],
+    "max": [
+      0.269,
+      1.768,
+      0.19
+    ]
+  },
+  "clips": [
+    {
+      "name": "squat",
+      "duration": 4,
+      "fps": 30,
+      "markers": {
+        "start": 0,
+        "middle": 0.2625,
+        "bottom": 0.5
+      },
+      "qa": {
+        "ankleDriftM": 0,
+        "lowestVertexM": [
+          0,
+          0
+        ],
+        "torsoClearance": 1.647,
+        "thighGapM": 0.064,
+        "minHipsHeightM": 0.557,
+        "maxHandReachZ": 0.658,
+        "minBackZ": -0.278
+      }
+    },
+    {
+      "name": "biceps_curl",
+      "duration": 4,
+      "fps": 30,
+      "markers": {
+        "start": 0,
+        "middle": 0.225,
+        "top": 0.425
+      },
+      "qa": {
+        "ankleDriftM": 0,
+        "lowestVertexM": [
+          0,
+          0
+        ],
+        "torsoClearance": 1.536,
+        "thighGapM": 0.061,
+        "minHipsHeightM": 0.97,
+        "maxHandReachZ": 0.282,
+        "minBackZ": -0.12
+      }
+    }
+  ]
+}

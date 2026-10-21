@@ -1,0 +1,48 @@
+{
+  "name": "forma-ai-coach",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20.9" },
+  "scripts": {
+    "dev": "next dev",
+    "dev:mock": "COACH_MODE=mock next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "assets:build": "tsx scripts/build-mannequin.ts",
+    "assets:validate": "node scripts/validate-assets.mjs",
+    "coach:eval": "tsx scripts/eval-coach.ts",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run assets:validate"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.0",
+    "@react-three/fiber": "^9.3.0",
+    "lucide-react": "^0.544.0",
+    "next": "^16.0.0",
+    "openai": "^6.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "server-only": "^0.0.1",
+    "three": "^0.180.0",
+    "zod": "^4.1.0",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/three": "^0.180.0",
+    "eslint": "^9.36.0",
+    "eslint-config-next": "^16.0.0",
+    "tailwindcss": "^4.1.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.5"
+  }
+}
