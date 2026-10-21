@@ -36,7 +36,7 @@ uv pip install -r requirements-sam.txt
 This runs on the CPU with no detectron2: the whole photo is used as the person's box, so crop it to the person. The first run fetches DINOv3's model *code* from GitHub through `torch.hub`. The weights come from the checkpoint you already downloaded.
 
 ```bash
-python reconstruct.py private/me/photo.jpg --name me     # → private/me/identity.json
+python reconstruct.py private/me/front.jpg private/me/side.jpg private/me/back.jpg --name me   # → private/me/identity.json (1+ photos)
 python build_avatar.py --identity private/me/identity.json   # → public/models/avatars/me.glb
 # open http://localhost:3000/?avatar=me
 ```
@@ -62,10 +62,7 @@ JPEG and iPhone HEIC both work.
 
 ## Roadmap
 
-1. **Multi-photo reconstruction.** SAM 3D Body reads one image at a time, but every result shares the MHR identity space.
-   - Shape: run front, side and back photos, then fuse identity and scales with a robust median. Later, refine by fitting silhouettes across all views.
-   - Colours: per vertex, sample from the view that sees it most directly, instead of diffusing into unseen areas.
-   - Consistency: report the spread between views, and warn when it is too large to trust.
+1. ~~**Multi-photo reconstruction.**~~ Done. `reconstruct.py front side back …` fuses the shape with a median, reports the height spread, colours each vertex from the view that sees it most head-on, and rejects backdrop and edge samples. Areas no photo sees well borrow their left/right mirror twin's colour. Still open: refining the shape by fitting silhouettes across views, and a fourth photo for the other profile.
 2. **Dumbbells** on MHR avatars, attached to the wrist joints.
 3. **In-app flow.** Consented upload, a processing service outside Vercel (CPU is enough: about 25 s inference plus about 1 min bake), short-lived private storage and a delete button.
 4. **Validation.** Real photos of consenting people, compared with tape measurements, before claiming any accuracy.
