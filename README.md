@@ -2,7 +2,7 @@
 
 > An iPhone-first, interactive 3D exercise demonstrator powered by GPT-6.1 Sol.
 
-**Status:** MVP in progress — generic-avatar demo working on iPhone 13 over LAN; HTTPS deploy pending. See [Implementation status](#implementation-status).  
+**Status:** MVP deployed (HTTPS, Vercel) and verified on a physical iPhone 13; final rehearsal pending. See [Implementation status](#implementation-status).  
 **Target device:** iPhone 13 (Safari, Add to Home Screen)  
 **Development device:** MacBook Pro M4 Pro  
 **Budget:** 20 engineering hours  
@@ -151,7 +151,7 @@ Never prefix secrets with `NEXT_PUBLIC_` and never commit `.env.local`.
 ### Testing on an iPhone
 
 - **Same Wi-Fi (quick):** run `npm run dev -- -H 0.0.0.0`, find the Mac's IP with `ipconfig getifaddr en0`, then open `http://<mac-ip>:3000` in Safari on the iPhone. `next.config.ts` allows the Mac's own LAN addresses as dev origins; without that, Next.js 16 blocks the dev JavaScript and the page appears frozen.
-- **HTTPS (required for the final test and Home Screen install):** deploy, for example on Vercel. Set `OPENAI_API_KEY`, `OPENAI_MODEL` and `OPENAI_REASONING_EFFORT=low` as **server** environment variables.
+- **HTTPS (required for the final test and Home Screen install):** deploy, for example on Vercel. Set the framework preset to **Next.js**; a project imported before the code existed defaults to "Other" and serves only `public/`, so every page returns 404. Set `OPENAI_API_KEY` and `OPENAI_MODEL` as **server** environment variables; `OPENAI_REASONING_EFFORT` defaults to `low`.
 
 ## Implementation status
 
@@ -163,14 +163,15 @@ Last updated 2026-10-21.
 | 2–5 Canvas, avatar, orbit | Done | Procedural rigged mannequin (`ASSETS.md`), 584 KiB GLB; touch orbit; front/side/¾ presets; DPR capped at 2; no real-time shadows |
 | 5–8 Squat + playback | Done | Play/pause/replay, 0.5×/1×, seek while paused; one active `AnimationAction` |
 | 8–10 Curl + catalog + phases | Done | Shared skeleton, no bind-pose glitch on switch; markers tested against the clips |
-| 10–13 API route + GPT-6.1 Sol | Done | Responses API tool loop, strict tool schema, Zod on server and client, rate limit, input caps. **Live `coach:eval`: 8/8 valid**, median latency about 5.1 s |
-| 13–15 Chat + reducer | Done | Commands applied once, visible in the Actions log; 38/38 unit tests |
-| 15–17 Device testing, errors | Mostly done | Physical iPhone over LAN: touch rotation, controls, keyboard, landscape, smooth playback and the GPT demo script all pass. Still to do: Airplane-mode check, test over mobile data |
-| 17–19 Polish, deploy | Pending | PWA manifest and generated icons are in place; HTTPS deploy not done yet |
+| 10–13 API route + GPT-6.1 Sol | Done | Responses API tool loop, strict tool schema, Zod on server and client, rate limit, input caps. One round trip when every command validates. **Live `coach:eval` on the deployed site: 8/8 valid, median 3.4 s, max 4.4 s** (it was 5.1 s with two round trips) |
+| 13–15 Chat + reducer | Done | Commands applied once, visible in the Actions log; 40/40 unit tests |
+| 15–17 Device testing, errors | Done | Physical iPhone 13: touch rotation, controls, keyboard, landscape, smooth playback, the GPT demo script over mobile data, and the offline message (coach unavailable, manual controls remain) |
+| 17–19 Polish, deploy | Done | Deployed on Vercel over HTTPS (framework preset: Next.js; production branch `mvp/generic-avatar`); Add to Home Screen verified |
 | 19–20 Rehearsal | Pending | Rehearse twice on the deployed URL and record a backup video |
 
 Known follow-ups:
-- Merge the coach's reply into the tool call so commands need one GPT round trip instead of two (target about 2–3 s).
+- Optional: fall back to the keyword coach, labelled Offline, so typed commands work without a connection.
+- Run the Playwright iPhone 13 suite (`npm run test:e2e`) and keep it in CI.
 - Have a qualified coach review the cues and motions; the catalog marks them `pending_expert_review`.
 - Not implemented: voice, body-shape presets, and SAM 3D Body / MHR personalisation (see `research/sam3d-mhr/`).
 
