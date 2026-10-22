@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { DEFAULT_AVATAR, type AvatarSource } from "@/lib/avatar/source";
-import type { CommandResult, CommandSource, SceneState } from "@/types/scene";
+import type { CommandResult, CommandSource, ExerciseId, SceneState } from "@/types/scene";
 import { describeCommand } from "./commands";
 import { applyCommands, INITIAL_SCENE } from "./reducer";
 
@@ -14,7 +14,12 @@ export type LogEntry = {
   detail?: string;
 };
 
-export type AvatarStatus = { status: "loading" | "ready" | "error"; error?: string };
+export type AvatarStatus = {
+  status: "loading" | "ready" | "error";
+  error?: string;
+  /** Exercises whose clip this avatar doesn't have (e.g. the mannequin only has squat and curl). */
+  missing?: ExerciseId[];
+};
 
 type SceneStore = {
   scene: SceneState;

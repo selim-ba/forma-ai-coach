@@ -155,7 +155,7 @@ Never prefix secrets with `NEXT_PUBLIC_` and never commit `.env.local`.
 
 ## Implementation status
 
-Last updated 2026-10-21.
+Last updated 2026-10-22.
 
 | Milestone | State | Evidence |
 |---|---|---|
@@ -168,12 +168,13 @@ Last updated 2026-10-21.
 | 15–17 Device testing, errors | Done | Physical iPhone 13: touch rotation, controls, keyboard, landscape, smooth playback, the GPT demo script over mobile data, and the offline message (coach unavailable, manual controls remain) |
 | 17–19 Polish, deploy | Done | Deployed on Vercel over HTTPS (framework preset: Next.js; production branch `mvp/generic-avatar`); Add to Home Screen verified |
 | 19–20 Rehearsal | Done | The 60-second demo script completed twice in a row without intervention, from the Home Screen app (one cold start, one continuing run) |
+| After the MVP | Done | Default avatar is the generic MHR body (hair, dumbbells); photo → personal avatar pipeline with photo texture (`research/avatar-pipeline/`, local only); three more exercises: dumbbell shoulder press, dumbbell Romanian deadlift, split squat. The wooden mannequin (`?avatar=mannequin`) keeps only the squat and curl |
 
 Known follow-ups:
 - Optional: fall back to the keyword coach, labelled Offline, so typed commands work without a connection.
 - Run the Playwright iPhone 13 suite (`npm run test:e2e`) and keep it in CI.
 - Have a qualified coach review the cues and motions; the catalog marks them `pending_expert_review`.
-- Not implemented: voice, body-shape presets, and SAM 3D Body / MHR personalisation (see `research/sam3d-mhr/`).
+- Not implemented: voice, body-shape presets, and creating a personal avatar inside the app (the photo pipeline runs offline on a Mac; see `research/avatar-pipeline/README.md`).
 
 ## Assets and rigging rules
 

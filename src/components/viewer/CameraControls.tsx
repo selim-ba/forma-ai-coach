@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { useSceneStore } from "@/lib/scene/store";
 import type { View } from "@/types/scene";
 
-export const CAMERA_TARGET = new THREE.Vector3(0, 0.88, 0.1);
+export const CAMERA_TARGET = new THREE.Vector3(0, 0.97, 0.1);
 
 /** Spherical presets around the target. The mannequin faces +Z. */
 const PRESETS: Record<View, { azimuthDeg: number; elevationDeg: number }> = {
@@ -17,11 +17,12 @@ const PRESETS: Record<View, { azimuthDeg: number; elevationDeg: number }> = {
 };
 
 /**
- * Distance that fits a ~1.95 m tall subject (plus forward reach) in the
- * viewport for the current aspect ratio — portrait phones need more distance.
+ * Distance that fits the subject in the viewport for the current aspect ratio —
+ * portrait phones need more distance. The frame spans about -0.2 m to 2.1 m so the
+ * dumbbells stay in view at the top of the shoulder press.
  */
 function fitDistance(fovDeg: number, aspect: number) {
-  const halfHeight = 1.08;
+  const halfHeight = 1.15;
   const halfWidth = 0.78;
   const vHalf = THREE.MathUtils.degToRad(fovDeg / 2);
   const hHalf = Math.atan(Math.tan(vHalf) * aspect);

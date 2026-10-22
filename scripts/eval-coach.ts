@@ -41,11 +41,11 @@ const cases: { prompt: string; check: Check }[] = [
     check: ({ body }) => (body.message.length > 20 ? null : "expected a catalog-based explanation"),
   },
   {
-    prompt: "Show me a deadlift.",
+    prompt: "Show me a bench press.",
     check: ({ body }) =>
       body.commands.some((c) => c.type === "select_exercise")
         ? "must not switch exercise for an unsupported request"
-        : /squat|curl/i.test(body.message)
+        : /squat|curl|press|deadlift|lunge/i.test(body.message)
           ? null
           : "expected an offer of the supported exercises",
   },

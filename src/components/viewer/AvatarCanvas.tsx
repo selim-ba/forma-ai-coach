@@ -5,6 +5,7 @@ import { useGLTF } from "@react-three/drei";
 import { Component, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import { resolveAvatar } from "@/lib/avatar/source";
+import { EXERCISES } from "@/lib/exercises/catalog";
 import { useSceneStore } from "@/lib/scene/store";
 import { AvatarModel } from "./AvatarModel";
 import { CameraControls } from "./CameraControls";
@@ -76,7 +77,7 @@ class ViewerErrorBoundary extends Component<{ children: ReactNode; url: string; 
 
 function ViewerMessage({ title, body, action }: { title: string; body: string; action?: { label: string; onClick: () => void } }) {
   return (
-    <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-8 text-center">
+    <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-surface/60 px-8 text-center backdrop-blur-sm">
       <p className="text-base font-semibold text-ink">{title}</p>
       <p className="text-sm text-ink-muted">{body}</p>
       {action && (
@@ -105,6 +106,9 @@ export default function AvatarCanvas() {
     useSceneStore.getState().setAvatarSource(source);
   }, [source]);
   const status = useSceneStore((s) => s.avatar.status);
+  const missing = useSceneStore((s) => s.avatar.missing);
+  const exerciseId = useSceneStore((s) => s.scene.exerciseId);
+  const unavailable = status === "ready" && (missing?.includes(exerciseId) ?? false);
 
   if (!webgl) {
     return (
@@ -143,6 +147,12 @@ export default function AvatarCanvas() {
         <ViewerMessage
           title="The avatar file is incomplete"
           body={useSceneStore.getState().avatar.error ?? "An animation clip is missing."}
+        />
+      )}
+      {unavailable && (
+        <ViewerMessage
+          title={`${EXERCISES[exerciseId].title} isn't animated for this avatar`}
+          body="The wooden mannequin only has the squat and the curl. Pick another exercise, or open the app without ?avatar=mannequin to use the default body."
         />
       )}
       {status === "loading" && (

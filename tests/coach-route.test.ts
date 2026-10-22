@@ -236,7 +236,10 @@ describe("mock coach — IMPLEMENTATION_PLAN test prompts", () => {
     ["Play it slowly.", squatScene, [{ type: "set_speed", speed: 0.5 }, { type: "play" }]],
     ["Show me a biceps curl from the front.", squatScene, [{ type: "select_exercise", exerciseId: "biceps_curl" }, { type: "set_view", view: "front" }, { type: "play" }]],
     ["Explain what I should look for in a squat.", squatScene, []],
-    ["Show me a deadlift.", squatScene, []],
+    ["Show me a bench press.", squatScene, []],
+    ["Show me a Romanian deadlift from the side.", squatScene, [{ type: "select_exercise", exerciseId: "romanian_deadlift" }, { type: "set_view", view: "side" }, { type: "play" }]],
+    ["Show a lunge and pause at the bottom.", squatScene, [{ type: "select_exercise", exerciseId: "split_squat" }, { type: "seek_phase", phase: "bottom" }, { type: "pause" }]],
+    ["Shoulder press, pause at the top.", squatScene, [{ type: "select_exercise", exerciseId: "shoulder_press" }, { type: "seek_phase", phase: "top" }, { type: "pause" }]],
     ["Make the knees bend backwards.", squatScene, []],
     ["Rotate the camera and replay.", squatScene, [{ type: "set_view", view: "side" }, { type: "seek_phase", phase: "start" }, { type: "play" }]],
   ];

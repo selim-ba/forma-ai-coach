@@ -2,7 +2,7 @@
  * Core scene vocabulary. These literal lists are the single source of truth for
  * every allowlist in the app (Zod schemas, the GPT tool schema, the UI).
  */
-export const EXERCISE_IDS = ["squat", "biceps_curl"] as const;
+export const EXERCISE_IDS = ["squat", "biceps_curl", "shoulder_press", "romanian_deadlift", "split_squat"] as const;
 export type ExerciseId = (typeof EXERCISE_IDS)[number];
 
 export const VIEWS = ["front", "side", "three_quarter"] as const;

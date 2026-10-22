@@ -30,7 +30,8 @@ export const DEFAULT_AVATAR: AvatarSource = MHR_GENERIC_AVATAR;
  *   (none) | ?avatar=mhr-generic -> generic MHR body (default, deployed)
  *   ?avatar=mannequin            -> procedural wooden mannequin
  *   ?avatar=<name>              -> personal avatar (public/models/avatars/<name>.glb, git-ignored, local only)
- * Any GLB must provide the `squat` and `biceps_curl` clips.
+ * MHR GLBs (build_avatar.py) have every catalog clip; the mannequin only the squat and the
+ * curl (the viewer marks the other exercises unavailable).
  */
 export function resolveAvatar(search: string): AvatarSource {
   const source = pickAvatar(search);

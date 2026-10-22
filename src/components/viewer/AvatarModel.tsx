@@ -21,7 +21,12 @@ type MirroredState = Pick<SceneState, "exerciseId" | "speed" | "seek" | "playing
 function syncMixer(actions: Actions, mixer: THREE.AnimationMixer, model: THREE.Object3D, state: MirroredState, applied: Applied) {
   const exercise = EXERCISES[state.exerciseId];
   const action = actions[exercise.clipName];
-  if (!action) return;
+  if (!action) {
+    // This avatar has no clip for the exercise (the viewer shows a message): stop the old one.
+    for (const other of Object.values(actions)) other?.stop();
+    applied.exerciseId = null;
+    return;
+  }
 
   // Re-activate if the action was stopped/uncached behind our back (e.g. React StrictMode's
   // dev-only unmount/remount runs drei's cleanup, which uncaches every action).
@@ -77,13 +82,14 @@ export function AvatarModel({ url }: { url: string }) {
   // One-time mesh setup.
   useLayoutEffect(() => disableFrustumCulling(model), [model]);
 
-  // Verify every catalog clip exists; surface a usable error otherwise.
+  // Check which catalog clips this avatar has. Older avatars (the wooden mannequin) only
+  // have some exercises: those are marked unavailable instead of failing the whole viewer.
   useEffect(() => {
     const missing = Object.values(EXERCISES).filter((e) => !actions[e.clipName]);
-    if (missing.length) {
-      setAvatarStatus({ status: "error", error: `Missing animation clip(s): ${missing.map((m) => m.clipName).join(", ")}` });
+    if (missing.length === Object.keys(EXERCISES).length) {
+      setAvatarStatus({ status: "error", error: "This avatar file has none of the exercise animations." });
     } else {
-      setAvatarStatus({ status: "ready" });
+      setAvatarStatus({ status: "ready", missing: missing.map((e) => e.id) });
     }
   }, [actions, setAvatarStatus]);
 

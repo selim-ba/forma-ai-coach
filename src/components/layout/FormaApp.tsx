@@ -38,10 +38,10 @@ export function FormaApp() {
       data-avatar={avatarStatus}
     >
       <header className="app-header flex items-center gap-3 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <span className="text-lg font-black tracking-tight">
+        <span className="shrink-0 text-lg font-black tracking-tight">
           forma<span className="text-accent">.</span>
         </span>
-        <div className="ml-auto">
+        <div className="ml-auto min-w-0">
           <ExerciseTabs />
         </div>
       </header>

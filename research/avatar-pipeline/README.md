@@ -5,7 +5,7 @@ This is an offline Python pipeline that produces a rigged, animated GLB for the 
 | Step | Script | Input | Output | Needs a photo |
 |---|---|---|---|---|
 | 0 | `inspect_mhr.py` | MHR model | `out/mhr_inspect.json` (parameter and joint names, probes) | No |
-| 1 | `build_avatar.py` | MHR model (+ optional identity JSON) | rigged GLB with `squat` and `biceps_curl` clips | No |
+| 1 | `build_avatar.py` | MHR model (+ optional identity JSON) | rigged GLB with the five exercise clips (`squat`, `biceps_curl`, `shoulder_press`, `romanian_deadlift`, `split_squat`) | No |
 | 2 | `reconstruct.py` | one or more photos | `private/<name>/`: `identity.json` (45 shape + scale values), colours, photo crops for the texture | **Yes** |
 | 3 | `build_avatar.py --identity …` | identity JSON | `public/models/avatars/<name>.glb` (git-ignored) | No |
 

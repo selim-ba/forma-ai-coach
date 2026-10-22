@@ -24,36 +24,54 @@ describe("exercise catalog", () => {
     }
   });
 
-  it("squat has a bottom marker; curl has a top but no bottom", () => {
-    expect(EXERCISES.squat.availablePhases.bottom).toBeDefined();
-    expect(EXERCISES.biceps_curl.availablePhases.top).toBeDefined();
-    expect(EXERCISES.biceps_curl.availablePhases.bottom).toBeUndefined();
-  });
-
-  it("markers and durations match the authored motion timelines", () => {
-    for (const e of EXERCISE_LIST) {
-      const timeline = MOTION_TIMELINES.find((t) => t.clipName === e.clipName);
-      expect(timeline, e.clipName).toBeDefined();
-      expect(e.clipDuration).toBe(timeline!.duration);
-      for (const [phase, value] of Object.entries(e.availablePhases)) {
-        expect(value, `${e.id}.${phase}`).toBeCloseTo(timeline!.markers[phase], 6);
-      }
+  it("lowering exercises have a bottom marker; lifting ones a top and no bottom", () => {
+    for (const id of ["squat", "romanian_deadlift", "split_squat"] as const) {
+      expect(EXERCISES[id].availablePhases.bottom, id).toBeDefined();
+      expect(EXERCISES[id].availablePhases.top, id).toBeUndefined();
+    }
+    for (const id of ["biceps_curl", "shoulder_press"] as const) {
+      expect(EXERCISES[id].availablePhases.top, id).toBeDefined();
+      expect(EXERCISES[id].availablePhases.bottom, id).toBeUndefined();
     }
   });
 
-  it("matches the generated GLB metadata (run `npm run assets:build` after changing motions)", () => {
-    const metaPath = resolve(__dirname, "../public/models/forma-mannequin.meta.json");
-    expect(existsSync(metaPath)).toBe(true);
-    const meta = JSON.parse(readFileSync(metaPath, "utf8")) as {
-      clips: { name: string; duration: number; markers: Record<string, number> }[];
-    };
+  it("dumbbell exercises show the dumbbells", () => {
     for (const e of EXERCISE_LIST) {
-      const clip = meta.clips.find((c) => c.name === e.clipName);
-      expect(clip, e.clipName).toBeDefined();
-      expect(clip!.duration).toBeCloseTo(e.clipDuration, 3);
+      expect(e.props.includes("dumbbells"), e.id).toBe(/dumbbell/i.test(e.title));
+    }
+  });
+
+  type Meta = { clips: { name: string; duration: number; markers: Record<string, number> }[] };
+  const readMeta = (file: string) => {
+    const path = resolve(__dirname, "../public/models", file);
+    expect(existsSync(path), file).toBe(true);
+    return JSON.parse(readFileSync(path, "utf8")) as Meta;
+  };
+  const expectClipMatches = (meta: Meta, e: (typeof EXERCISE_LIST)[number]) => {
+    const clip = meta.clips.find((c) => c.name === e.clipName);
+    expect(clip, e.clipName).toBeDefined();
+    expect(clip!.duration).toBeCloseTo(e.clipDuration, 3);
+    for (const [phase, value] of Object.entries(e.availablePhases)) {
+      expect(clip!.markers[phase], `${e.id}.${phase}`).toBeCloseTo(value as number, 6);
+    }
+  };
+
+  it("matches the default body's GLB metadata (rebuild with research/avatar-pipeline/build_avatar.py)", () => {
+    const meta = readMeta("mhr-generic.meta.json");
+    for (const e of EXERCISE_LIST) expectClipMatches(meta, e);
+  });
+
+  it("the wooden mannequin's clips (squat, curl) match its timelines and GLB metadata", () => {
+    const meta = readMeta("forma-mannequin.meta.json");
+    const withClip = EXERCISE_LIST.filter((e) => MOTION_TIMELINES.some((t) => t.clipName === e.clipName));
+    expect(withClip.map((e) => e.id).sort()).toEqual(["biceps_curl", "squat"]);
+    for (const e of withClip) {
+      const timeline = MOTION_TIMELINES.find((t) => t.clipName === e.clipName)!;
+      expect(e.clipDuration).toBe(timeline.duration);
       for (const [phase, value] of Object.entries(e.availablePhases)) {
-        expect(clip!.markers[phase]).toBeCloseTo(value as number, 6);
+        expect(value, `${e.id}.${phase}`).toBeCloseTo(timeline.markers[phase], 6);
       }
+      expectClipMatches(meta, e);
     }
   });
 

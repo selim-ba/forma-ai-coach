@@ -1,6 +1,18 @@
 import { EXERCISES } from "@/lib/exercises/catalog";
 import type { ExerciseId, SceneSnapshot } from "@/types/scene";
 
+const OFFER = "I can show a squat, a biceps curl, a shoulder press, a Romanian deadlift or a split squat.";
+
+/** Which supported exercise the message names, if any (most specific first). */
+function namedExercise(has: (...words: (string | RegExp)[]) => boolean): ExerciseId | null {
+  if (has(/\b(split.?squats?|lunges?)\b/)) return "split_squat";
+  if (has(/\b(romanian|rdl|deadlifts?|hip hinge)\b/)) return "romanian_deadlift";
+  if (has(/\b(shoulder|overhead|military)\s+press/, /\bpress(es)?\b/)) return "shoulder_press";
+  if (has("squat")) return "squat";
+  if (has("curl", "bicep")) return "biceps_curl";
+  return null;
+}
+
 /**
  * Deterministic, keyword-based stand-in for GPT, used when COACH_MODE=mock
  * (local development without an API key, automated e2e tests, offline demo
@@ -14,8 +26,7 @@ export function mockCoach(message: string, scene: SceneSnapshot): { message: str
 
   if (has(/backwards?|hyperextend|wrong way|\bbreak\b|\bsnap\b/)) {
     return {
-      message:
-        "I can't show unsafe or anatomically impossible movement. I can show the squat or biceps curl with good control instead.",
+      message: `I can't show unsafe or anatomically impossible movement. ${OFFER}`,
       commands: [],
     };
   }
@@ -26,18 +37,14 @@ export function mockCoach(message: string, scene: SceneSnapshot): { message: str
       commands: [],
     };
   }
-  if (has(/\b(deadlifts?|bench|lunges?|push.?ups?|pull.?ups?|planks?|rows?|rowing|press(es)?|burpees?|jumps?|jumping)\b/)) {
-    return {
-      message: "That exercise isn't available yet. I can show a beginner squat or a dumbbell biceps curl.",
-      commands: [],
-    };
+  if (has(/\b(bench|leg press|chest press|push.?ups?|pull.?ups?|chin.?ups?|planks?|rows?|rowing|burpees?|jumps?|jumping|dips?)\b/)) {
+    return { message: `That exercise isn't available yet. ${OFFER}`, commands: [] };
   }
 
-  let exerciseId: ExerciseId = scene.exerciseId;
+  const named = namedExercise(has);
+  const exerciseId: ExerciseId = named ?? scene.exerciseId;
   const commands: unknown[] = [];
-  if (has("squat")) exerciseId = "squat";
-  if (has("curl", "bicep")) exerciseId = "biceps_curl";
-  const switching = exerciseId !== scene.exerciseId || (has(/\bshow\b/) && has("squat", "curl", "bicep"));
+  const switching = exerciseId !== scene.exerciseId || (named !== null && has(/\bshow\b/));
   if (switching) commands.push({ type: "select_exercise", exerciseId });
 
   if (has("three quarter", "3/4", "¾", "angle")) commands.push({ type: "set_view", view: "three_quarter" });
@@ -79,7 +86,7 @@ export function mockCoach(message: string, scene: SceneSnapshot): { message: str
   }
   if (commands.length === 0) {
     return {
-      message: "I can show a squat or a biceps curl, change the view or speed, and pause at key positions.",
+      message: `${OFFER} I can also change the view or speed and pause at key positions.`,
       commands,
     };
   }
