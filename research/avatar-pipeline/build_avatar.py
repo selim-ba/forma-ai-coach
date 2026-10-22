@@ -233,25 +233,24 @@ def locals_from_state(state: np.ndarray, parents: np.ndarray):
 
 
 # --------------------------------------------------------------------------- build
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--identity", type=Path, help="identity.json from reconstruct.py (omit for the generic body)")
-    ap.add_argument("--name", default=None, help="output name (default: mhr-generic, or the identity folder name)")
-    ap.add_argument("--no-texture", action="store_true", help="per-vertex photo colours only (no photo texture)")
-    args = ap.parse_args()
+def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, mhr: MHRModel | None = None,
+          log=print) -> dict:
+    """Bake the generic body (identity_path=None) or a personal one into out_path (+ .meta.json).
 
-    m = MHRModel()
+    Personal avatars read appearance.npz / texture_views.npz / view_*.jpg next to the identity
+    file. Returns the metadata written to the .meta.json file.
+    """
+    print = log  # noqa: A001 — every progress line goes to the caller's logger
+    m = mhr or MHRModel()
     P = len(m.pose_names)
     base = np.zeros(P, np.float32)
     identity = np.zeros(m.identity_count, np.float32)
-    personal = args.identity is not None
+    personal = identity_path is not None
     if personal:
-        data = json.loads(args.identity.read_text())
+        data = json.loads(identity_path.read_text())
         identity = np.asarray(data["identity"], np.float32)
         for name, value in data.get("scales", {}).items():
             base[m.index(name)] = value
-    name = args.name or (args.identity.parent.name if personal else "mhr-generic")
-    out_path = REPO / "public/models" / ("avatars" if personal else "") / f"{name}.glb"
 
     idx = {n: i for i, n in enumerate(m.joint_names)}
     ankles = [idx["l_talocrural"], idx["r_talocrural"]]
@@ -653,12 +652,12 @@ def main() -> None:
     normals /= np.linalg.norm(normals, axis=1, keepdims=True) + 1e-12
 
     photo_srgb = None
-    if personal and (args.identity.parent / "appearance.npz").is_file():
-        photo_srgb = np.load(args.identity.parent / "appearance.npz")["colors"].astype(np.float64) / 255.0
+    if personal and (identity_path.parent / "appearance.npz").is_file():
+        photo_srgb = np.load(identity_path.parent / "appearance.npz")["colors"].astype(np.float64) / 255.0
         if len(photo_srgb) != len(v0):
             photo_srgb = None
         else:
-            print(f"  using photo colours from {args.identity.parent.name}/appearance.npz")
+            print(f"  using photo colours from {identity_path.parent.name}/appearance.npz")
 
     # Hair: MHR bodies are bald. Push the scalp out and tint it (see hair.py).
     eye_mid = (s0[idx["l_eye"], :3] + s0[idx["r_eye"], :3]) / 2
@@ -702,11 +701,11 @@ def main() -> None:
     # Photo texture (personal avatars): split the mesh per photo, see texture.py. Textured
     # vertices get a white colour multiplier; the untextured rest continues the texture's colours.
     tex = None
-    if personal and not args.no_texture:
+    if personal and use_texture:
         names = list(m.joint_names)
         upper = [names.index(n) for n in texture.HEAD_NECK_JOINTS if n in names]
         head_neck_w = (m.lbs_weights * np.isin(m.lbs_indices, upper)).sum(1)
-        tex = texture.build(faces.astype(np.int64), args.identity.parent, mirror_map(v_bald), head_neck_w)
+        tex = texture.build(faces.astype(np.int64), identity_path.parent, mirror_map(v_bald), head_neck_w)
     pbr = {"baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0, "roughnessFactor": 0.8}
     out_v, out_n, out_faces = v0, normals, faces
     if tex is not None:
@@ -716,7 +715,7 @@ def main() -> None:
         out_faces = tex["faces"]
         pbr["baseColorTexture"] = {"index": g.texture(tex["jpeg"])}
         print(f"  photo texture: {tex['info']}")
-    elif personal and not args.no_texture:
+    elif personal and use_texture:
         print("  no texture_views.npz: re-run reconstruct.py to get the sharper photo texture")
     g.doc["materials"].append({"name": "Skin", "pbrMetallicRoughness": pbr})
     attrs = {
@@ -794,8 +793,22 @@ def main() -> None:
         "clips": report,
     }
     out_path.with_suffix(".meta.json").write_text(json.dumps(meta, indent=2) + "\n")
-    print(f"✓ wrote {out_path.relative_to(REPO)} ({meta['bytes']/1024:.0f} KiB, height {meta['heightM']} m, "
+    shown = out_path.relative_to(REPO) if out_path.is_relative_to(REPO) else out_path
+    print(f"✓ wrote {shown} ({meta['bytes']/1024:.0f} KiB, height {meta['heightM']} m, "
           f"{len(rot_joints)} rotating joints, palm twist {twist:.2f} rad)")
+    return meta
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--identity", type=Path, help="identity.json from reconstruct.py (omit for the generic body)")
+    ap.add_argument("--name", default=None, help="output name (default: mhr-generic, or the identity folder name)")
+    ap.add_argument("--no-texture", action="store_true", help="per-vertex photo colours only (no photo texture)")
+    args = ap.parse_args()
+    personal = args.identity is not None
+    name = args.name or (args.identity.parent.name if personal else "mhr-generic")
+    out_path = REPO / "public/models" / ("avatars" if personal else "") / f"{name}.glb"
+    build(args.identity, out_path, use_texture=not args.no_texture)
 
 
 if __name__ == "__main__":

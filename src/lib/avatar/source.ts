@@ -1,4 +1,5 @@
 import { MODEL_URL } from "@/lib/exercises/catalog";
+import { AVATAR_SERVICE_URL, REMOTE_AVATAR_ID, remoteGlbUrl } from "./remote";
 
 export type AvatarSource = {
   id: string;
@@ -6,6 +7,8 @@ export type AvatarSource = {
   /** Shown under the viewer so nobody mistakes the avatar for a measurement. */
   label: string;
   personal: boolean;
+  /** Made by the avatar service from the person's photos (temporary, deletable). */
+  remote?: boolean;
 };
 
 export const MANNEQUIN_AVATAR: AvatarSource = {
@@ -29,6 +32,7 @@ export const DEFAULT_AVATAR: AvatarSource = MHR_GENERIC_AVATAR;
  * Pick the avatar from the page URL:
  *   (none) | ?avatar=mhr-generic -> generic MHR body (default, deployed)
  *   ?avatar=mannequin            -> procedural wooden mannequin
+ *   ?avatar=r-<24 hex>           -> personal avatar made by the avatar service (services/avatar)
  *   ?avatar=<name>              -> personal avatar (public/models/avatars/<name>.glb, git-ignored, local only)
  * MHR GLBs (build_avatar.py) have every catalog clip; the mannequin only the squat and the
  * curl (the viewer marks the other exercises unavailable).
@@ -45,5 +49,8 @@ function pickAvatar(search: string): AvatarSource {
   if (!id || !/^[a-z0-9-]{1,40}$/.test(id)) return DEFAULT_AVATAR;
   if (id === "mannequin") return MANNEQUIN_AVATAR;
   if (id === "mhr-generic") return MHR_GENERIC_AVATAR;
+  if (REMOTE_AVATAR_ID.test(id) && AVATAR_SERVICE_URL) {
+    return { id, url: remoteGlbUrl(id), label: "approximate body from your photos", personal: true, remote: true };
+  }
   return { id, url: `/models/avatars/${id}.glb`, label: "approximate body shape from a photo", personal: true };
 }

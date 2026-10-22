@@ -97,33 +97,34 @@ def save_texture_view(full, uv: np.ndarray, weight: np.ndarray, small_size: tupl
     return ((uv_full - np.array([x0, y0])) * k).astype(np.float32), crop.size
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("photos", type=Path, nargs="+", help="one or more photos of the same person")
-    ap.add_argument("--name", required=True, help="lowercase letters, digits and dashes, e.g. 'selim'")
-    ap.add_argument("--sam-dir", type=Path, default=SAM_DIR_DEFAULT, help="clone of facebookresearch/sam-3d-body")
-    ap.add_argument("--checkpoint-dir", type=Path, default=CKPT_DIR_DEFAULT)
-    args = ap.parse_args()
+class ReconstructionError(Exception):
+    """A problem with the photos themselves; the message is safe to show to the person."""
 
-    if not re.fullmatch(r"[a-z0-9-]{1,40}", args.name):
-        sys.exit("--name must be lowercase letters, digits or dashes (it becomes ?avatar=<name>).")
-    if not (args.sam_dir / "sam_3d_body").is_dir():
-        sys.exit(f"SAM 3D Body code not found at {args.sam_dir}. See README.md, step 2 setup.")
 
-    cpu_shim()
-    sys.path.insert(0, str(args.sam_dir))
+def load_estimator(sam_dir: Path = SAM_DIR_DEFAULT, checkpoint_dir: Path = CKPT_DIR_DEFAULT, device: str = "cpu"):
+    """Load SAM 3D Body once (about 10 s); reuse the estimator for every reconstruction."""
+    if not (sam_dir / "sam_3d_body").is_dir():
+        raise SystemExit(f"SAM 3D Body code not found at {sam_dir}. See README.md, step 2 setup.")
+    if device == "cpu":
+        cpu_shim()
+    if str(sam_dir) not in sys.path:
+        sys.path.insert(0, str(sam_dir))
     from sam_3d_body import SAM3DBodyEstimator, load_sam_3d_body  # noqa: E402
 
-    started = time.time()
     model, cfg = load_sam_3d_body(
-        checkpoint_path=str(args.checkpoint_dir / "model.ckpt"),
-        mhr_path=str(args.checkpoint_dir / "assets" / "mhr_model.pt"),
-        device="cpu",
+        checkpoint_path=str(checkpoint_dir / "model.ckpt"),
+        mhr_path=str(checkpoint_dir / "assets" / "mhr_model.pt"),
+        device=device,
     )
-    estimator = SAM3DBodyEstimator(sam_3d_body_model=model, model_cfg=cfg)
-    print(f"  model loaded in {time.time() - started:.0f}s")
+    return SAM3DBodyEstimator(sam_3d_body_model=model, model_cfg=cfg)
 
-    mhr = MHRModel()
+
+def reconstruct(estimator, mhr: MHRModel, photos: list[Path], out_dir: Path, overlays: bool = True, log=print) -> dict:
+    """Photos of one person -> identity.json, appearance.npz, texture_views.npz and view crops in out_dir.
+
+    Returns the identity record (also written to out_dir/identity.json), including any
+    "warnings". Raises ReconstructionError when no usable person is found.
+    """
     first_scale = mhr.pose_names.index("scale_eye_width")
     scale_names = mhr.pose_names[first_scale:]
 
@@ -133,7 +134,6 @@ def main() -> None:
     nose_index = int(head[np.argmax(rest[head, 2])])
     head_index = int(head[np.argmin(rest[head, 2])])  # back of the head: nose - back = facing direction
 
-    out_dir = HERE / "private" / args.name
     out_dir.mkdir(parents=True, exist_ok=True)
     faces = np.asarray(estimator.faces, np.int64)
     shapes, scale_sets, heights, samples, views, tex_views = [], [], [], [], [], []
@@ -144,25 +144,28 @@ def main() -> None:
         verts, _ = mhr.evaluate(pose, shape)
         return float(verts[:, 1].max() - verts[:, 1].min()) / 100
 
-    for i, photo in enumerate(args.photos, start=1):
+    skipped = []
+    for i, photo in enumerate(photos, start=1):
         img, full = load_image(photo)
         h, w = img.shape[:2]
         started = time.time()
         outputs = estimator.process_one_image(img, bboxes=np.array([[0, 0, w, h]], np.float32), inference_type="body")
         if not outputs:
-            print(f"  ✗ {photo.name}: no person found, skipped")
+            log(f"  ✗ {photo.name}: no person found, skipped")
+            skipped.append(i)
             continue
         person = outputs[0]
         shape = np.asarray(person["shape_params"], np.float32).reshape(-1)
         scales = np.asarray(person["mhr_model_params"], np.float32).reshape(-1)[first_scale:first_scale + len(scale_names)]
         if shape.shape[0] != mhr.identity_count or len(scales) != len(scale_names):
-            sys.exit(f"Unexpected output sizes: shape {shape.shape}, scales {scales.shape}")
+            raise RuntimeError(f"Unexpected output sizes: shape {shape.shape}, scales {scales.shape}")
 
         posed = np.asarray(person["pred_vertices"], np.float64).reshape(-1, 3)
         err, project, _signs = best_projector(person, w, h)
         uv, depth = project(posed)
         view = facing_label(posed, nose_index, head_index)
-        overlay_image(img, uv, depth, faces, posed).save(out_dir / f"overlay_{i}_{view}.png")
+        if overlays:
+            overlay_image(img, uv, depth, faces, posed).save(out_dir / f"overlay_{i}_{view}.png")
         ids = rasterize_ids(uv, depth, faces, w, h)
         colors, weight = sample_visible(img, uv, ids, faces, posed + project.cam_t)
         face_visible, tex_weight = texture_visibility(img, uv, ids, faces, posed + project.cam_t)
@@ -176,11 +179,12 @@ def main() -> None:
         heights.append(height_of(shape, scales))
         samples.append((colors, weight))
         views.append(view)
-        print(f"  {photo.name}: {view} view, height {heights[-1]:.2f} m, keypoint fit {err:.1f}px, "
-              f"{(weight > 0).mean()*100:.0f}% of vertices seen, {time.time() - started:.0f}s")
+        log(f"  {photo.name}: {view} view, height {heights[-1]:.2f} m, keypoint fit {err:.1f}px, "
+            f"{(weight > 0).mean()*100:.0f}% of vertices seen, {time.time() - started:.0f}s")
 
     if not shapes:
-        sys.exit("No person found in any photo. Use full-body photos where the person fills most of the frame.")
+        raise ReconstructionError("No person found in the photos. Take full-body photos, head to toe, "
+                                  "with the person filling most of the frame.")
 
     # Fuse: element-wise median is robust to one bad view.
     shape = np.median(np.stack(shapes), axis=0)
@@ -200,6 +204,14 @@ def main() -> None:
         if int(stale.stem.split("_")[1]) > len(tex_views):
             stale.unlink()
 
+    warnings = []
+    if skipped:
+        warnings.append(f"No person found in photo {', '.join(map(str, skipped))}; it was skipped.")
+    if len(shapes) > 1 and (spread > 0.06 or max(shape_dist) > 2.0):
+        warnings.append("The photos disagree noticeably: check they show the same person, outfit and distance.")
+    if views.count("front") > 1 or ("back" not in views and len(views) >= 3):
+        warnings.append("Expected one front, one side and one back photo.")
+
     out = {
         "identity": [round(float(v), 6) for v in shape],
         "scales": {n: round(float(v), 6) for n, v in zip(scale_names, scales)},
@@ -207,22 +219,43 @@ def main() -> None:
         "views": views,
         "perViewHeightM": [round(x, 3) for x in heights],
         "perViewShapeDistance": [round(x, 3) for x in shape_dist],
+        "warnings": warnings,
         "source": f"SAM 3D Body (facebook/sam-3d-body-dinov3, SAM License), {len(shapes)} photo(s), body decoder, median fusion",
         "created": dt.datetime.now().isoformat(timespec="seconds"),
         "note": "Approximate body shape from photos. Not a measurement. Delete this folder to remove it.",
     }
-    path = out_dir / "identity.json"
-    path.write_text(json.dumps(out, indent=2) + "\n")
+    (out_dir / "identity.json").write_text(json.dumps(out, indent=2) + "\n")
 
-    print(f"✓ wrote {path.relative_to(HERE)} from {len(shapes)} photo(s) ({', '.join(views)}), "
-          f"fused height {height:.2f} m, {seen.mean()*100:.0f}% of the body seen in at least one photo")
+    log(f"✓ identity from {len(shapes)} photo(s) ({', '.join(views)}), fused height {height:.2f} m, "
+        f"{seen.mean()*100:.0f}% of the body seen in at least one photo")
     if len(shapes) > 1:
-        print(f"  consistency: heights {min(heights):.2f}–{max(heights):.2f} m (spread {spread*100:.0f} cm), "
-              f"shape distance to fused {', '.join(f'{d:.2f}' for d in shape_dist)}")
-        if spread > 0.06 or max(shape_dist) > 2.0:
-            print("  ⚠ the photos disagree noticeably — check they show the same body, outfit and camera distance")
-    if views.count("front") > 1 or ("back" not in views and len(views) >= 3):
-        print("  ⚠ expected one front, one side and one back view — check the overlay_*.png images")
+        log(f"  consistency: heights {min(heights):.2f}–{max(heights):.2f} m (spread {spread*100:.0f} cm), "
+            f"shape distance to fused {', '.join(f'{d:.2f}' for d in shape_dist)}")
+    for w_ in warnings:
+        log(f"  ⚠ {w_}")
+    return out
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("photos", type=Path, nargs="+", help="one or more photos of the same person")
+    ap.add_argument("--name", required=True, help="lowercase letters, digits and dashes, e.g. 'selim'")
+    ap.add_argument("--sam-dir", type=Path, default=SAM_DIR_DEFAULT, help="clone of facebookresearch/sam-3d-body")
+    ap.add_argument("--checkpoint-dir", type=Path, default=CKPT_DIR_DEFAULT)
+    args = ap.parse_args()
+
+    if not re.fullmatch(r"[a-z0-9-]{1,40}", args.name):
+        sys.exit("--name must be lowercase letters, digits or dashes (it becomes ?avatar=<name>).")
+    started = time.time()
+    estimator = load_estimator(args.sam_dir, args.checkpoint_dir, "cuda" if torch.cuda.is_available() else "cpu")
+    print(f"  model loaded in {time.time() - started:.0f}s")
+    out_dir = HERE / "private" / args.name
+    try:
+        reconstruct(estimator, MHRModel(), args.photos, out_dir)
+    except ReconstructionError as e:
+        sys.exit(str(e))
+    path = out_dir / "identity.json"
+    print(f"✓ wrote {path.relative_to(HERE)}")
     print(f"  next: python build_avatar.py --identity {path.relative_to(HERE)}")
 
 

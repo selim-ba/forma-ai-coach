@@ -45,7 +45,10 @@ function FloorShadow() {
   );
 }
 
-class ViewerErrorBoundary extends Component<{ children: ReactNode; url: string; onRetry: () => void }, { error: Error | null }> {
+class ViewerErrorBoundary extends Component<
+  { children: ReactNode; url: string; remote?: boolean; onRetry: () => void },
+  { error: Error | null }
+> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) {
     return { error };
@@ -54,6 +57,16 @@ class ViewerErrorBoundary extends Component<{ children: ReactNode; url: string; 
     useSceneStore.getState().setAvatarStatus({ status: "error", error: error.message });
   }
   render() {
+    if (this.state.error && this.props.remote) {
+      // Personal avatars are temporary: a missing file almost always means it expired or was deleted.
+      return (
+        <ViewerMessage
+          title="This avatar isn't available anymore"
+          body="Personal avatars are deleted after 24 hours, or when you delete them. You can make a new one from the generic body."
+          action={{ label: "Use the generic body", onClick: () => window.location.assign("/") }}
+        />
+      );
+    }
     if (this.state.error) {
       return (
         <ViewerMessage
@@ -120,7 +133,7 @@ export default function AvatarCanvas() {
   }
 
   return (
-    <ViewerErrorBoundary url={source.url} onRetry={() => setAttempt((a) => a + 1)}>
+    <ViewerErrorBoundary url={source.url} remote={source.remote} onRetry={() => setAttempt((a) => a + 1)}>
       <Canvas
         key={attempt}
         className="!absolute inset-0"

@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { MyAvatarButton } from "@/components/avatar/MyAvatarButton";
 import { CoachChat } from "@/components/coach/CoachChat";
 import { ExerciseTabs, PlaybackControls } from "@/components/controls/PlaybackControls";
 import { ViewPresets } from "@/components/viewer/ViewPresets";
@@ -51,6 +52,9 @@ export function FormaApp() {
         <AvatarCanvas />
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3">
           <div className="flex flex-col items-start gap-1.5">
+            <div className="pointer-events-auto">
+              <MyAvatarButton />
+            </div>
             {scene.phase && !scene.playing && (
               <span className="rounded-full bg-accent px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-surface" data-testid="phase-badge">
                 {PHASE_LABEL[scene.phase]}
