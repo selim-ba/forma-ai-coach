@@ -224,6 +224,7 @@ export async function handleCoachRequest(req: Request, deps: CoachDeps): Promise
           speed: sceneSoFar.speed,
           view: sceneSoFar.view,
           phase: sceneSoFar.phase,
+          cues: sceneSoFar.cues,
         });
         accepted = [...accepted, ...result.accepted];
         rejected.push(...result.rejected);

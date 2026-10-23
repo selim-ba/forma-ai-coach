@@ -25,20 +25,30 @@ describe("exercise catalog", () => {
   });
 
   it("lowering exercises have a bottom marker; lifting ones a top and no bottom", () => {
-    for (const id of ["squat", "romanian_deadlift", "split_squat"] as const) {
+    for (const id of ["squat", "romanian_deadlift", "split_squat", "goblet_squat"] as const) {
       expect(EXERCISES[id].availablePhases.bottom, id).toBeDefined();
       expect(EXERCISES[id].availablePhases.top, id).toBeUndefined();
     }
-    for (const id of ["biceps_curl", "shoulder_press"] as const) {
+    for (const id of ["biceps_curl", "shoulder_press", "bent_over_row", "lateral_raise"] as const) {
       expect(EXERCISES[id].availablePhases.top, id).toBeDefined();
       expect(EXERCISES[id].availablePhases.bottom, id).toBeUndefined();
     }
+    // The swing has both ends: the back-swing (bottom) comes before the float (top).
+    const swing = EXERCISES.kettlebell_swing.availablePhases;
+    expect(swing.bottom).toBeLessThan(swing.top!);
   });
 
-  it("dumbbell exercises show the dumbbells", () => {
+  it("dumbbell exercises show the dumbbells, kettlebell exercises exactly one kettlebell", () => {
     for (const e of EXERCISE_LIST) {
       expect(e.props.includes("dumbbells"), e.id).toBe(/dumbbell/i.test(e.title));
+      const bells = e.props.filter((p) => p.startsWith("kettlebell"));
+      expect(bells.length, e.id).toBe(/kettlebell/i.test(e.title) ? 1 : 0);
     }
+  });
+
+  it("gives every exercise its own 'Try asking' prompt", () => {
+    const prompts = EXERCISE_LIST.map((e) => e.coachPrompt);
+    expect(new Set(prompts).size).toBe(prompts.length);
   });
 
   type Meta = { clips: { name: string; duration: number; markers: Record<string, number> }[] };

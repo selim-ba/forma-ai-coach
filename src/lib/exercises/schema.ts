@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { EXERCISE_IDS, PHASES, VIEWS } from "@/types/scene";
 
+/** Prop meshes baked into the avatar GLBs (see build_avatar.py). */
+export const PROPS = ["dumbbells", "kettlebell_goblet", "kettlebell_swing"] as const;
+export type Prop = (typeof PROPS)[number];
+
 const normalized = z.number().min(0).max(1);
 
 export const ExerciseSchema = z.object({
@@ -19,9 +23,11 @@ export const ExerciseSchema = z.object({
   availableViews: z.array(z.enum(VIEWS)).min(1),
   /** View the demo should open in when the exercise is selected manually. */
   defaultView: z.enum(VIEWS),
-  /** Scene props to show with this exercise (e.g. dumbbells). */
-  props: z.array(z.enum(["dumbbells"])),
+  /** Scene props to show with this exercise (each is a mesh in the avatar GLB). */
+  props: z.array(z.enum(PROPS)),
   summary: z.string().min(1),
+  /** Example question shown under "Try asking" in the coach. */
+  coachPrompt: z.string().min(1),
   reviewedCues: z.array(z.string().min(1)).min(3),
   limitations: z.array(z.string().min(1)).min(1),
   review: z.object({

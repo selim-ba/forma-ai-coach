@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { MyAvatarButton } from "@/components/avatar/MyAvatarButton";
 import { CoachChat } from "@/components/coach/CoachChat";
 import { ExerciseTabs, PlaybackControls } from "@/components/controls/PlaybackControls";
+import { CueToggle } from "@/components/viewer/CueToggle";
 import { ViewPresets } from "@/components/viewer/ViewPresets";
 import { useVisualViewport } from "@/hooks/useVisualViewport";
 import { EXERCISES } from "@/lib/exercises/catalog";
@@ -66,8 +67,9 @@ export function FormaApp() {
               </span>
             )}
           </div>
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto flex flex-col items-end gap-2">
             <ViewPresets />
+            <CueToggle />
           </div>
         </div>
         <div className="pointer-events-none absolute inset-x-0 bottom-2 px-4 text-center">

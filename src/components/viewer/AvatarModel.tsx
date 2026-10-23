@@ -6,7 +6,15 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import * as THREE from "three";
 import { EXERCISES } from "@/lib/exercises/catalog";
 import { playhead, useSceneStore } from "@/lib/scene/store";
+import type { Prop } from "@/lib/exercises/schema";
 import type { ExerciseId, SceneState } from "@/types/scene";
+
+/** Prop → mesh name in the avatar GLBs (research/avatar-pipeline/build_avatar.py). */
+const PROP_MESHES: Record<Prop, string> = {
+  dumbbells: "Dumbbells",
+  kettlebell_goblet: "KettlebellGoblet",
+  kettlebell_swing: "KettlebellSwing",
+};
 
 type Actions = Record<string, THREE.AnimationAction | null>;
 type Applied = { exerciseId: ExerciseId | null; seekNonce: number };
@@ -24,6 +32,10 @@ function syncMixer(actions: Actions, mixer: THREE.AnimationMixer, model: THREE.O
   if (!action) {
     // This avatar has no clip for the exercise (the viewer shows a message): stop the old one.
     for (const other of Object.values(actions)) other?.stop();
+    for (const meshName of Object.values(PROP_MESHES)) {
+      const mesh = model.getObjectByName(meshName);
+      if (mesh) mesh.visible = false;
+    }
     applied.exerciseId = null;
     return;
   }
@@ -42,8 +54,10 @@ function syncMixer(actions: Actions, mixer: THREE.AnimationMixer, model: THREE.O
     action.clampWhenFinished = false;
     action.play();
     applied.exerciseId = state.exerciseId;
-    const dumbbells = model.getObjectByName("Dumbbells");
-    if (dumbbells) dumbbells.visible = exercise.props.includes("dumbbells");
+    for (const [prop, meshName] of Object.entries(PROP_MESHES) as [Prop, string][]) {
+      const mesh = model.getObjectByName(meshName);
+      if (mesh) mesh.visible = exercise.props.includes(prop);
+    }
   }
 
   action.timeScale = state.speed;
@@ -58,6 +72,9 @@ function syncMixer(actions: Actions, mixer: THREE.AnimationMixer, model: THREE.O
   // never shows a frame in the bind pose.
   mixer.update(0);
 }
+
+/** The loaded avatar's root object, for overlays that follow its bones (CueOverlay). */
+export const avatarRig: { current: THREE.Object3D | null } = { current: null };
 
 function disableFrustumCulling(model: THREE.Object3D) {
   model.traverse((obj) => {
@@ -79,8 +96,14 @@ export function AvatarModel({ url }: { url: string }) {
 
   const applied = useRef<Applied>({ exerciseId: null, seekNonce: -1 });
 
-  // One-time mesh setup.
-  useLayoutEffect(() => disableFrustumCulling(model), [model]);
+  // One-time mesh setup, and expose the rig to overlays.
+  useLayoutEffect(() => {
+    disableFrustumCulling(model);
+    avatarRig.current = model;
+    return () => {
+      if (avatarRig.current === model) avatarRig.current = null;
+    };
+  }, [model]);
 
   // Check which catalog clips this avatar has. Older avatars (the wooden mannequin) only
   // have some exercises: those are marked unavailable instead of failing the whole viewer.

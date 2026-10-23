@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CUE_IDS, MAX_CUES } from "@/types/cues";
 import {
   EXERCISE_IDS,
   PHASES,
@@ -19,6 +20,8 @@ export const SceneCommandSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("set_view"), view: z.enum(VIEWS) }),
   z.strictObject({ type: z.literal("seek_phase"), phase: z.enum(PHASES) }),
   z.strictObject({ type: z.literal("reset") }),
+  z.strictObject({ type: z.literal("show_cues"), cueIds: z.array(z.enum(CUE_IDS)).min(1).max(MAX_CUES) }),
+  z.strictObject({ type: z.literal("clear_cues") }),
 ]) satisfies z.ZodType<SceneCommand>;
 
 export const SceneSnapshotSchema = z.strictObject({
@@ -27,6 +30,7 @@ export const SceneSnapshotSchema = z.strictObject({
     speed: SpeedSchema,
     view: z.enum(VIEWS),
     phase: z.enum(PHASES).nullable().default(null),
+    cues: z.array(z.enum(CUE_IDS)).max(MAX_CUES).default([]),
   });
 
 const VIEW_LABEL: Record<(typeof VIEWS)[number], string> = {
@@ -46,6 +50,10 @@ export function describeCommand(command: SceneCommand): string {
       return `view ${VIEW_LABEL[command.view]}`;
     case "seek_phase":
       return `seek ${command.phase}`;
+    case "show_cues":
+      return `show ${command.cueIds.map((id) => id.split(".")[1].replace(/_/g, " ")).join(", ")}`;
+    case "clear_cues":
+      return "clear cues";
     default:
       return command.type;
   }

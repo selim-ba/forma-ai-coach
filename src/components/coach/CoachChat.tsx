@@ -3,17 +3,18 @@
 import { ArrowUp, ChevronDown, MessageCircle } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ActionLog } from "@/components/debug/ActionLog";
+import { EXERCISE_LIST, EXERCISES } from "@/lib/exercises/catalog";
 import { toSnapshot } from "@/lib/scene/reducer";
 import { useSceneStore } from "@/lib/scene/store";
 import type { ChatTurn, CoachError, CoachSuccess } from "@/types/coach";
+import type { ExerciseId } from "@/types/scene";
 import { MessageList, type ChatMessage } from "./MessageList";
 
-const SUGGESTIONS = [
-  "Show me a beginner squat from the side",
-  "Slow it down and pause at the bottom",
-  "What should I pay attention to?",
-  "Switch to a biceps curl and replay",
-];
+/** One example per exercise, the current one first. */
+function suggestionsFor(current: ExerciseId): string[] {
+  const first = EXERCISES[current].coachPrompt;
+  return [first, ...EXERCISE_LIST.filter((e) => e.id !== current).map((e) => e.coachPrompt)];
+}
 
 const CLIENT_TIMEOUT_MS = 30_000;
 const MAX_MESSAGES = 30;
@@ -30,6 +31,27 @@ export function CoachChat() {
   const [mode, setMode] = useState<CoachMode>("unknown");
   const inflight = useRef(false);
   const logCount = useSceneStore((s) => s.log.length);
+  const sheet = useRef<HTMLElement>(null);
+
+  // Tell the 3D view how much of it the open sheet covers, so it can reframe the avatar.
+  useEffect(() => {
+    const { setCoachTop } = useSceneStore.getState();
+    const el = sheet.current;
+    if (!open || !el) {
+      setCoachTop(null);
+      return;
+    }
+    const update = () => setCoachTop(el.getBoundingClientRect().top);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    window.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+      setCoachTop(null);
+    };
+  }, [open]);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,6 +140,7 @@ export function CoachChat() {
 
   return (
     <section
+      ref={sheet}
       aria-label="Coach"
       className={`flex flex-col rounded-t-3xl border-t border-white/10 bg-surface-raised ${
         open
@@ -208,14 +231,28 @@ export function CoachChat() {
 }
 
 function Suggestions({ onPick, disabled }: { onPick: (s: string) => void; disabled: boolean }) {
+  const current = useSceneStore((s) => s.scene.exerciseId);
+  const [first, ...others] = suggestionsFor(current);
   return (
-    <div className="flex flex-col gap-2 py-1">
+    <div className="flex min-w-0 flex-col gap-2 py-1">
       <p className="text-sm text-ink-muted">Try asking:</p>
-      {SUGGESTIONS.map((s) => (
-        <button key={s} type="button" disabled={disabled} onClick={() => onPick(s)} className="chip text-left">
-          {s}
-        </button>
-      ))}
+      {/* The current exercise's question first, then one per other exercise in a swipeable row. */}
+      <button type="button" disabled={disabled} onClick={() => onPick(first)} className="chip text-left">
+        {first}
+      </button>
+      <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" data-testid="more-suggestions">
+        {others.map((s) => (
+          <button
+            key={s}
+            type="button"
+            disabled={disabled}
+            onClick={() => onPick(s)}
+            className="chip shrink-0 snap-start whitespace-nowrap text-left"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -117,4 +117,29 @@ describe("applyCommands", () => {
     run([{ type: "set_view", view: "side" }, { type: "play" }]);
     expect(INITIAL_SCENE).toEqual(before);
   });
+
+  it("shows cues of the current exercise, rejects others, clears them on exercise change", () => {
+    const shown = run([{ type: "show_cues", cueIds: ["squat.knees_over_toes", "squat.chest_up"] }]);
+    expect(shown.results.every((r) => r.ok)).toBe(true);
+    expect(shown.state.cues).toEqual(["squat.knees_over_toes", "squat.chest_up"]);
+
+    const foreign = run([{ type: "show_cues", cueIds: ["rdl.flat_back"] }], shown.state);
+    expect(foreign.results[0]).toMatchObject({ ok: false, reason: "unsupported_cue" });
+    expect(foreign.state.cues).toEqual(["squat.knees_over_toes", "squat.chest_up"]);
+
+    const switched = run(
+      [{ type: "select_exercise", exerciseId: "romanian_deadlift" }, { type: "show_cues", cueIds: ["rdl.flat_back"] }],
+      shown.state,
+    );
+    expect(switched.results.every((r) => r.ok)).toBe(true);
+    expect(switched.state.cues).toEqual(["rdl.flat_back"]);
+    expect(run([{ type: "select_exercise", exerciseId: "squat" }], switched.state).state.cues).toEqual([]);
+    expect(run([{ type: "clear_cues" }], shown.state).state.cues).toEqual([]);
+  });
+
+  it("rejects unknown cue ids, empty lists and more than three cues", () => {
+    for (const cueIds of [["squat.dance"], [], ["squat.knees_over_toes", "squat.hips_back", "squat.chest_up", "squat.knees_over_toes"]]) {
+      expect(SceneCommandSchema.safeParse({ type: "show_cues", cueIds }).success, JSON.stringify(cueIds)).toBe(false);
+    }
+  });
 });

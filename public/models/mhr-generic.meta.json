@@ -5,7 +5,7 @@
   "units": "metres",
   "up": "+Y",
   "forward": "+Z",
-  "bytes": 1790332,
+  "bytes": 2189020,
   "vertices": 18439,
   "joints": 127,
   "animatedJoints": {
@@ -90,7 +90,7 @@
           -0.0007,
           0.0
         ],
-        "minWristToThighAxisM": 0.084
+        "minWristToThighAxisM": 0.274
       }
     },
     {
@@ -109,6 +109,78 @@
           -0.0019
         ],
         "minWristToThighAxisM": 0.195
+      }
+    },
+    {
+      "name": "goblet_squat",
+      "duration": 4.0,
+      "fps": 30,
+      "markers": {
+        "start": 0,
+        "middle": 0.2625,
+        "bottom": 0.5
+      },
+      "qa": {
+        "ankleDriftM": 0.00018,
+        "lowestVertexM": [
+          -0.0001,
+          0.001
+        ],
+        "minWristToThighAxisM": 0.416
+      }
+    },
+    {
+      "name": "kettlebell_swing",
+      "duration": 4.0,
+      "fps": 30,
+      "markers": {
+        "start": 0,
+        "bottom": 0.3,
+        "top": 0.55
+      },
+      "qa": {
+        "ankleDriftM": 0.0,
+        "lowestVertexM": [
+          0.0004,
+          0.001
+        ],
+        "minWristToThighAxisM": 0.218
+      }
+    },
+    {
+      "name": "bent_over_row",
+      "duration": 4.0,
+      "fps": 30,
+      "markers": {
+        "start": 0,
+        "middle": 0.225,
+        "top": 0.425
+      },
+      "qa": {
+        "ankleDriftM": 2e-05,
+        "lowestVertexM": [
+          -0.0008,
+          -0.0008
+        ],
+        "minWristToThighAxisM": 0.261
+      }
+    },
+    {
+      "name": "lateral_raise",
+      "duration": 4.0,
+      "fps": 30,
+      "markers": {
+        "start": 0,
+        "middle": 0.225,
+        "top": 0.425
+      },
+      "qa": {
+        "ankleDriftM": 0.0,
+        "lowestVertexM": [
+          0.0,
+          0.0
+        ],
+        "minWristToThighAxisM": 0.191
       }
     }
   ]

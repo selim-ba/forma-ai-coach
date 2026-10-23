@@ -1,6 +1,7 @@
 """Steps 1 and 3: bake an MHR body into a rigged, animated GLB for the Forma viewer.
 
-Clips: squat, biceps_curl, shoulder_press, romanian_deadlift, split_squat.
+Clips: squat, biceps_curl, shoulder_press, romanian_deadlift, split_squat, goblet_squat,
+kettlebell_swing, bent_over_row, lateral_raise.
 
     python build_avatar.py                                   # generic MHR body
     python build_avatar.py --identity private/me/identity.json --name me
@@ -20,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 
 import numpy as np
@@ -48,6 +50,17 @@ TIMELINES = {
                           "markers": {"start": 0, "middle": 1.05 / 4, "bottom": 2.0 / 4}},
     "split_squat": {"keys": [(0, 0), (0.3, 0), (1.8, 1), (2.2, 1), (3.7, 0), (4, 0)],
                     "markers": {"start": 0, "middle": 1.05 / 4, "bottom": 2.0 / 4}},
+    "goblet_squat": {"keys": [(0, 0), (0.3, 0), (1.8, 1), (2.2, 1), (3.7, 0), (4, 0)],
+                     "markers": {"start": 0, "middle": 1.05 / 4, "bottom": 2.0 / 4}},
+    # Two curves: hinge depth (keys) and the arms' angle from vertical (arm_keys, x 90°).
+    # Stand, hike back between the legs, snap up to chest height, swing back, stand up.
+    "kettlebell_swing": {"keys": [(0, 0), (0.3, 0), (1.2, 1), (2.2, 0), (3.2, 1), (4, 0)],
+                         "arm_keys": [(0, 0.25), (0.3, 0.25), (1.2, -0.12), (2.2, 1.0), (3.2, -0.12), (4, 0.25)],
+                         "markers": {"start": 0, "bottom": 1.2 / 4, "top": 2.2 / 4}},
+    "bent_over_row": {"keys": [(0, 0), (0.3, 0), (1.5, 1), (1.9, 1), (3.7, 0), (4, 0)],
+                      "markers": {"start": 0, "middle": 0.9 / 4, "top": 1.7 / 4}},
+    "lateral_raise": {"keys": [(0, 0), (0.3, 0), (1.5, 1), (1.9, 1), (3.7, 0), (4, 0)],
+                      "markers": {"start": 0, "middle": 0.9 / 4, "top": 1.7 / 4}},
 }
 
 # Split squat stance (metres, relative to the rest ankles): left foot forward, right foot back
@@ -140,8 +153,60 @@ def split_pose(s: float, twist: float) -> dict:
     return d
 
 
+def goblet_pose(s: float, twist: float) -> dict:
+    """Goblet squat: the squat's legs and torso; the arms hold a kettlebell at the chest (solved)."""
+    d = squat_pose(s, twist)
+    both(d, "uparm_ry", ARM_DOWN_RY + 0.25)   # seeds for the arm solve
+    both(d, "uparm_rz", 0.7)
+    both(d, "elbow_bend", 1.9)
+    return d
+
+
+def swing_pose(h: float, twist: float) -> dict:
+    """Kettlebell swing body; h = hinge depth 0 (standing tall) .. 1 (back-swing). Arms are solved."""
+    pitch = D(50) * h
+    d = {"root_rx": pitch, "spine_bend0": D(-2) * h, "neck_bend": D(-14) * h, "head_bend": D(-4) * h}
+    both(d, "upleg_rz", -(pitch + D(25) * h))
+    both(d, "knee_bend", D(30) * h)
+    both(d, "foot_bend", -D(5) * h)            # = -(pitch - hip flexion + knee): feet flat
+    both(d, "uparm_ry", ARM_DOWN_RY + 0.1)
+    both(d, "uparm_rz", 0.1)
+    both(d, "elbow_bend", ELBOW_REST)
+    both(d, "lowarm_twist", twist)
+    return d
+
+
+ROW_PITCH = 45  # degrees of hinge held for the whole bent-over row
+
+
+def row_pose(p: float, twist: float) -> dict:
+    """Bent-over row: a fixed 45° hinge with soft knees; p = 0 arms hanging .. 1 pulled. Arms are solved."""
+    pitch = D(ROW_PITCH)
+    d = {"root_rx": pitch, "spine_bend0": D(-2), "neck_bend": D(-14), "head_bend": D(-4)}
+    both(d, "upleg_rz", -(pitch + D(10)))
+    both(d, "knee_bend", D(20))
+    both(d, "foot_bend", -D(10))
+    both(d, "uparm_ry", ARM_DOWN_RY + 0.1)
+    both(d, "uparm_rz", 0.3 + 0.4 * p)
+    both(d, "elbow_bend", ELBOW_REST + 1.4 * p)
+    both(d, "lowarm_twist", twist)
+    return d
+
+
+def raise_pose(p: float, twist: float) -> dict:
+    """Lateral raise; p = 0 arms by the sides .. 1 at shoulder height. Arms are solved."""
+    d: dict = {}
+    both(d, "clavicle_ry", 0.06 * p)
+    both(d, "uparm_ry", ARM_DOWN_RY + 1.4 * p)
+    both(d, "uparm_rz", 0.05 + 0.3 * p)
+    both(d, "elbow_bend", ELBOW_REST + 0.2)
+    both(d, "lowarm_twist", twist)
+    return d
+
+
 POSES = {"squat": squat_pose, "biceps_curl": curl_pose, "shoulder_press": press_pose,
-         "romanian_deadlift": rdl_pose, "split_squat": split_pose}
+         "romanian_deadlift": rdl_pose, "split_squat": split_pose, "goblet_squat": goblet_pose,
+         "kettlebell_swing": swing_pose, "bent_over_row": row_pose, "lateral_raise": raise_pose}
 
 
 def cylinder(center: np.ndarray, axis: np.ndarray, radius: float, length: float, segments: int = 20):
@@ -185,6 +250,51 @@ def dumbbell(center: np.ndarray, axis: np.ndarray):
         tris.append(t_ + off)
         off += len(p_)
     return np.concatenate(pos), np.concatenate(nrm), np.concatenate(tris)
+
+
+def kettlebell(handle: np.ndarray, down: np.ndarray, across: np.ndarray, radius: float = 0.085):
+    """A kettlebell whose handle (a torus in the down/across plane) is centred on `handle`
+    and whose bell hangs below it along `down`. Returns (positions, normals, triangles)."""
+    down = down / np.linalg.norm(down)
+    across = across - down * np.dot(across, down)
+    across /= np.linalg.norm(across)
+    third = np.cross(down, across)
+    center = handle + down * (radius + 0.05)
+    pos, nrm, tris = [], [], []
+    # bell: UV sphere
+    rings, segs = 14, 24
+    for i in range(rings + 1):
+        th = math.pi * i / rings
+        for k in range(segs):
+            ph = 2 * math.pi * k / segs
+            n = math.cos(th) * -down + math.sin(th) * (math.cos(ph) * across + math.sin(ph) * third)
+            pos.append(center + radius * n)
+            nrm.append(n)
+    for i in range(rings):
+        for k in range(segs):
+            a, b = i * segs + k, i * segs + (k + 1) % segs
+            c, d = a + segs, b + segs
+            tris += [[a, c, b], [b, c, d]]
+    # handle: torus around `third`, centred between the hands
+    base = len(pos)
+    R, r, n_major, n_minor = 0.065, 0.012, 28, 10
+    for i in range(n_major):
+        u = 2 * math.pi * i / n_major
+        ring_dir = math.cos(u) * across + math.sin(u) * -down
+        ring_c = handle + down * 0.035 + R * ring_dir
+        for k in range(n_minor):
+            v = 2 * math.pi * k / n_minor
+            n = math.cos(v) * ring_dir + math.sin(v) * third
+            pos.append(ring_c + r * n)
+            nrm.append(n)
+    for i in range(n_major):
+        for k in range(n_minor):
+            a = base + i * n_minor + k
+            b = base + i * n_minor + (k + 1) % n_minor
+            c = base + ((i + 1) % n_major) * n_minor + k
+            d = base + ((i + 1) % n_major) * n_minor + (k + 1) % n_minor
+            tris += [[a, b, c], [b, d, c]]
+    return np.asarray(pos), np.asarray(nrm), np.asarray(tris, np.int64)
 
 
 # --------------------------------------------------------------------------- math
@@ -333,6 +443,27 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
                     break
                 scale *= 0.5
             else:
+                # Every step made things worse: usually a parameter pushed into its joint limit.
+                # Freeze the parameters at a limit that the step pushes into and solve for the rest.
+                trial = dict(pose)
+                for side in ("l", "r"):
+                    free = np.ones(len(unknowns), bool)
+                    for k, u in enumerate(unknowns):
+                        lo, hi = (limits or {}).get(u, m.pose_limits[m.index(f"{side}_{u}")])
+                        v_ = pose.get(f"{side}_{u}", 0.0)
+                        if (v_ <= lo + 1e-4 and steps[side][k] < 0) or (v_ >= hi - 1e-4 and steps[side][k] > 0):
+                            free[k] = False
+                    step = np.zeros(len(unknowns))
+                    if free.any():
+                        step[free] = np.clip(np.linalg.lstsq(J[side][:, free], -r[side], rcond=None)[0], -0.3, 0.3)
+                    for k, u in enumerate(unknowns):
+                        name = f"{side}_{u}"
+                        lo, hi = (limits or {}).get(u, m.pose_limits[m.index(name)])
+                        trial[name] = float(np.clip(pose.get(name, 0.0) + 0.5 * step[k], lo, hi))
+                r_trial = err(trial)
+                if sum(float(v @ v) for v in r_trial.values()) < sum(float(v @ v) for v in r.values()):
+                    pose, r = trial, r_trial
+                    continue
                 break
         solve_arms.last_error = max(float(np.abs(v).max()) for v in r.values())  # type: ignore[attr-defined]
         return pose
@@ -363,7 +494,7 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
             ])
         return ["uparm_ry", "elbow_bend"], residual
 
-    def plant_feet(pose: dict, iterations: int = 4) -> dict:
+    def plant_feet(pose: dict, iterations: int = 4, widen: float = 0.0) -> dict:
         """Hip ab/adduction correction so each ankle keeps its rest X (no sideways foot slide).
 
         MHR's rest legs are slightly abducted, so pure hip flexion swings the feet outwards.
@@ -375,7 +506,7 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
             done = True
             for k, side in enumerate(("l", "r")):
                 name = f"{side}_upleg_ry"
-                err = s[ankles[k], 0] - rest_ankles[k, 0]
+                err = s[ankles[k], 0] - (rest_ankles[k, 0] + (widen if side == "l" else -widen))
                 if abs(err) < 2e-4:
                     continue
                 done = False
@@ -447,12 +578,83 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     # ---------------------------------------------------------------- Romanian deadlift
     # Arms hang straight down from the shoulders, hands just in front of the thighs, palms
     # facing the body (pronated grip).
+    # Leg "front surface" model: how far the thigh and shin stick out in front of their bone
+    # axis (measured on the rest mesh), so the dumbbells can be kept just in front of the legs.
+    def leg_radius(side: str, a: str, b: str) -> float:
+        pa, pb = s0[idx[f"{side}_{a}"], :3], s0[idx[f"{side}_{b}"], :3]
+        mid = (pa + pb) / 2
+        near = (np.abs(v0[:, 1] - mid[1]) < 0.02) & (np.abs(v0[:, 0] - mid[0]) < 0.07)
+        return float(v0[near, 2].max() - mid[2]) if near.any() else 0.07
+
+    LEG_SEGMENTS = {side: [("upleg", "lowleg", leg_radius(side, "upleg", "lowleg")),
+                           ("lowleg", "talocrural", leg_radius(side, "lowleg", "talocrural"))] for side in ("l", "r")}
+    DUMBBELL_CLEARANCE = 0.09  # palm → far edge of the plates (3.5 cm offset + 4.5 cm radius) + 1 cm
+
+    def leg_front_z(st, side: str, y: float) -> float:
+        front = -np.inf
+        for a, b, r in LEG_SEGMENTS[side]:
+            pa, pb = st[idx[f"{side}_{a}"], :3], st[idx[f"{side}_{b}"], :3]
+            lo, hi = min(pa[1], pb[1]), max(pa[1], pb[1])
+            if lo <= y <= hi and hi - lo > 1e-6:
+                p = pa + (y - pa[1]) / (pb[1] - pa[1]) * (pb - pa)
+                front = max(front, p[2] + r)
+        return front
+
+    # ---------------------------------------------------------------- body-surface clearance
+    # Front-surface depth map of the torso + legs (no arms) in the rest pose: for each 1 cm
+    # (x, y) cell, the largest z (front-most skin). Arm points are mapped into the rest pose
+    # through the torso frame (so it follows the hinge) and must stay in front of the skin.
+    arm_words = ("uparm", "lowarm", "wrist", "hand", "thumb", "index", "middle", "ring", "pinky")
+    arm_joint_ids = [i for i, n in enumerate(m.joint_names) if any(w in n for w in arm_words)]
+    arm_w = (m.lbs_weights * np.isin(m.lbs_indices, arm_joint_ids)).sum(1)
+    trunk = v0[arm_w < 0.2]
+    GX0, GY0, CELL = -0.45, 0.0, 0.01
+    front_map = np.full((91, 200), -np.inf)
+    back_map = np.full((91, 200), np.inf)
+    gx = np.clip(((trunk[:, 0] - GX0) / CELL).astype(int), 0, 90)
+    gy = np.clip(((trunk[:, 1] - GY0) / CELL).astype(int), 0, 199)
+    np.maximum.at(front_map, (gx, gy), trunk[:, 2])
+    np.minimum.at(back_map, (gx, gy), trunk[:, 2])
+    # close one-cell holes between vertices
+    pf, pb = np.pad(front_map, 1, constant_values=-np.inf), np.pad(back_map, 1, constant_values=np.inf)
+    front_map = np.max([pf[1 + dx:92 + dx, 1 + dy:201 + dy] for dx in (-1, 0, 1) for dy in (-1, 0, 1)], axis=0)
+    back_map = np.min([pb[1 + dx:92 + dx, 1 + dy:201 + dy] for dx in (-1, 0, 1) for dy in (-1, 0, 1)], axis=0)
+
+    def frame_of(st):
+        hips = (st[idx["l_upleg"], :3] + st[idx["r_upleg"], :3]) / 2
+        up = st[idx["c_neck"], :3] - hips
+        up /= np.linalg.norm(up)
+        left = st[idx["l_upleg"], :3] - st[idx["r_upleg"], :3]
+        left -= up * np.dot(left, up)
+        left /= np.linalg.norm(left)
+        return hips, np.stack([left, up, np.cross(left, up)])  # rows: x, y, z axes
+
+    rest_hips, rest_axes = frame_of(s0)
+
+    def skin_penetration(st, side: str) -> float:
+        """How far (m) the forearm, hand and dumbbell are inside the trunk, measured to its front
+        skin plus a margin (0 when clear). Points beside or behind the trunk don't count."""
+        hips, axes = frame_of(st)
+        sh, el, wr = arm_points(st, side)
+        hand = wr + 0.08 * (wr - el) / (np.linalg.norm(wr - el) + 1e-9)
+        pts = [(el + f * (wr - el), 0.04) for f in (0.33, 0.66)] + [(wr, 0.09), (hand, 0.085)]
+        worst = 0.0
+        for p, margin in pts:
+            q = rest_hips + rest_axes.T @ (axes @ (p - hips))  # same place relative to the torso, at rest
+            ix, iy = int((q[0] - GX0) / CELL), int((q[1] - GY0) / CELL)
+            if 0 <= ix <= 90 and 0 <= iy <= 199 and back_map[ix, iy] < q[2] < front_map[ix, iy] + margin:
+                worst = max(worst, front_map[ix, iy] + margin - q[2])
+        return worst
+
     def rdl_goals(s_: float):
         def residual(st, side):
             sh, el, wr = arm_points(st, side)
+            hang = sh[2] + 0.12 * (1 - s_) + 0.03 * s_            # in front of the thighs, then vertical
+            z_goal = max(hang, leg_front_z(st, side, wr[1]) + DUMBBELL_CLEARANCE)  # never into the legs
+            z_goal = max(z_goal, wr[2] + skin_penetration(st, side))             # nor into the hips/belly
             return np.array([
-                SIGN[side] * (wr[0] - sh[0]) + 0.08,           # hands in front of the thighs, inside the shoulders
-                (wr[2] - sh[2]) - (0.12 * (1 - s_) + 0.03 * s_),  # in front of the thighs, then vertical
+                SIGN[side] * (wr[0] - sh[0]) + 0.08,               # hands in front of the thighs, inside the shoulders
+                wr[2] - z_goal,
                 flexion(sh, el, wr) - D(8),
             ])
         return ["uparm_ry", "uparm_rz", "elbow_bend"], residual
@@ -554,11 +756,191 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     print(f"  split squat: start solve error {split_err:.4f}, back-foot pitch {math.degrees(foot_pitch):.0f}°, "
           f"toe bend {split_toe:.2f} (toes {min(toe_options.values())*100:.1f} cm from the floor)")
 
-    TWISTS = {"squat": twist, "biceps_curl": twist, "shoulder_press": press_twist,
-              "romanian_deadlift": rdl_twist, "split_squat": 0.0}
-    SEEDS = {"shoulder_press": press_start, "romanian_deadlift": rdl_start}
+    # ---------------------------------------------------------------- shared helpers (new exercises)
+    def torso_frame(st):
+        """(hips centre, up, left, forward) of the torso: left = character's left (+x at rest)."""
+        hips = (st[idx["l_upleg"], :3] + st[idx["r_upleg"], :3]) / 2
+        up = st[idx["c_neck"], :3] - hips
+        up /= np.linalg.norm(up)
+        left = st[idx["l_upleg"], :3] - st[idx["r_upleg"], :3]
+        left -= up * np.dot(left, up)
+        left /= np.linalg.norm(left)
+        return hips, up, left, np.cross(left, up)
 
-    def goals_for(clip: str, amount: float):
+    def inwardness(state: np.ndarray) -> float:
+        """1 when both palms face the body's midline (neutral grip)."""
+        return float(np.mean([-SIGN[side] * palm_normal(state, side)[0] for side in ("l", "r")]))
+
+    def best_twists(pose: dict, score) -> tuple[float, float, float]:
+        """Grid over humerus and forearm twist; returns (score, humerus, forearm) with the highest score."""
+        best = (-9.0, 0.0, 0.0)
+        for ut in np.linspace(-1.5, 1.8, 12):
+            for lt in np.linspace(-2.2, 1.0, 17):
+                sc = score(evaluate({**pose, "l_uparm_twist": ut, "r_uparm_twist": ut,
+                                     "l_lowarm_twist": lt, "r_lowarm_twist": lt})[1])
+                if sc > best[0]:
+                    best = (sc, float(ut), float(lt))
+        return best
+
+    def fixed_twists(ut: float, lt: float) -> dict:
+        return {"l_uparm_twist": ut, "r_uparm_twist": ut, "l_lowarm_twist": lt, "r_lowarm_twist": lt}
+
+    # ---------------------------------------------------------------- goblet squat
+    # Hands together in front of the upper chest holding the kettlebell's horns, elbows down
+    # and a little outside the wrists. Targets follow the torso as it leans in the squat.
+    def goblet_goals(_s: float):
+        def residual(st, side):
+            sh, el, wr = arm_points(st, side)
+            _hips, up, left, fwd = torso_frame(st)
+            sg = SIGN[side]
+            chest = st[idx["c_spine3"], :3]
+            target = chest + fwd * 0.21 + up * 0.07 + left * (sg * 0.055)
+            return np.array([*(wr - target), sg * np.dot(el - wr, left) - 0.04])
+        return ["uparm_ry", "uparm_rz", "elbow_bend", "uparm_twist"], residual
+
+    u_gb, r_gb = goblet_goals(0.0)
+    goblet_start = solve_arms(goblet_pose(0.0, 0.0), u_gb, r_gb, iterations=40, limits=PRESS_LIMITS)
+    goblet_err = solve_arms.last_error
+    gb_scores = [inwardness(evaluate({**goblet_start, "l_lowarm_twist": t, "r_lowarm_twist": t})[1]) for t in twists]
+    goblet_twist = float(twists[int(np.argmax(gb_scores))])
+    goblet_start = {**goblet_start, "l_lowarm_twist": goblet_twist, "r_lowarm_twist": goblet_twist}
+    print(f"  goblet: hold solve error {goblet_err:.4f}, palms facing in {max(gb_scores):.2f}, forearm twist {goblet_twist:.2f}")
+
+    # ---------------------------------------------------------------- bent-over row
+    # Start: arms hanging under the shoulders (clear of the legs), palms facing in. Top: wrists
+    # at the sides of the waist, elbows driven back close to the body.
+    def row_goals(p: float):
+        def residual(st, side):
+            sh, el, wr = arm_points(st, side)
+            hips, up, left, fwd = torso_frame(st)
+            sg = SIGN[side]
+            hang = sh + np.array([-sg * 0.05, -0.97 * arm_len, 0.02])
+            hang[2] = max(hang[2], leg_front_z(st, side, hang[1]) + DUMBBELL_CLEARANCE)
+            pulled = hips + up * 0.24 + left * (sg * 0.23) - fwd * 0.02
+            target = hang + (pulled - hang) * p
+            return np.array([*(wr - target), sg * np.dot(el - sh, left) - 0.04])
+        return ["uparm_ry", "uparm_rz", "elbow_bend", "uparm_twist"], residual
+
+    u_rw, r_rw = row_goals(0.0)
+    row_start = solve_arms(row_pose(0.0, 0.0), u_rw, r_rw, iterations=40, limits=PRESS_LIMITS)
+    row_err = solve_arms.last_error
+    rw_scores = [inwardness(evaluate({**row_start, "l_lowarm_twist": t, "r_lowarm_twist": t})[1]) for t in twists]
+    row_twist = float(twists[int(np.argmax(rw_scores))])
+    row_start = {**row_start, "l_lowarm_twist": row_twist, "r_lowarm_twist": row_twist}
+    walk = dict(row_start)
+    for p_ in np.linspace(0.1, 1.0, 10):
+        u_, r_ = row_goals(float(p_))
+        walk = solve_arms({**walk, **{k: v for k, v in row_pose(float(p_), row_twist).items() if "uparm" not in k
+                                      and "elbow" not in k}}, u_, r_, iterations=25, limits=PRESS_LIMITS)
+    print(f"  row: start solve error {row_err:.4f}, top solve error {solve_arms.last_error:.4f}, "
+          f"palms facing in {max(rw_scores):.2f}, forearm twist {row_twist:.2f}")
+
+    # ---------------------------------------------------------------- lateral raise
+    # The arm direction sweeps from 12° to 82° away from vertical, in the scapular plane
+    # (25° forward of straight out to the side), elbows softly bent, palms facing in → down.
+    def raise_goals(p: float):
+        angle = D(12) + (D(82) - D(12)) * p
+
+        def residual(st, side):
+            sh, el, wr = arm_points(st, side)
+            sg = SIGN[side]
+            out = np.array([sg * math.cos(D(25)), 0.0, math.sin(D(25))])
+            want = math.sin(angle) * out + math.cos(angle) * np.array([0.0, -1.0, 0.0])
+            cur = (wr - sh) / (np.linalg.norm(wr - sh) + 1e-9)
+            return np.array([*(cur - want), flexion(sh, el, wr) - D(15)])
+        return ["uparm_ry", "uparm_rz", "elbow_bend"], residual
+
+    u_lr, r_lr = raise_goals(0.0)
+    raise_start = solve_arms(raise_pose(0.0, 0.0), u_lr, r_lr, iterations=40, limits=PRESS_LIMITS)
+    lr_best = best_twists(raise_start, inwardness)
+    raise_fixed = fixed_twists(lr_best[1], lr_best[2])
+    raise_start = solve_arms({**raise_start, **raise_fixed}, u_lr, r_lr, iterations=25, limits=PRESS_LIMITS)
+    walk = dict(raise_start)
+    for p_ in np.linspace(0.1, 1.0, 10):
+        u_, r_ = raise_goals(float(p_))
+        walk = solve_arms({**walk, "l_clavicle_ry": 0.06 * p_, "r_clavicle_ry": 0.06 * p_}, u_, r_, iterations=25,
+                          limits=PRESS_LIMITS)
+    print(f"  lateral raise: top solve error {solve_arms.last_error:.4f}, palms facing in at the start {lr_best[0]:.2f}")
+
+    # ---------------------------------------------------------------- kettlebell swing
+    # Both hands on the handle at the midline; the arms point along a world-space angle from
+    # vertical (arm_keys), long and relaxed. Palms face the body, like the deadlift grip.
+    def thigh_overlap(st, p: np.ndarray, margin: float) -> float:
+        """How far (m) a point is inside either thigh (+ margin); <= 0 when clear."""
+        worst = -1.0
+        for side in ("l", "r"):
+            a, b = st[idx[f"{side}_upleg"], :3], st[idx[f"{side}_lowleg"], :3]
+            u = float(np.clip(np.dot(p - a, b - a) / np.dot(b - a, b - a), 0, 1))
+            worst = max(worst, LEG_SEGMENTS[side][0][2] + margin - float(np.linalg.norm(p - (a + u * (b - a)))))
+        return worst
+
+    def swing_goals(arm_angle: float):
+        def residual(st, side):
+            sh, el, wr = arm_points(st, side)
+            sg = SIGN[side]
+            mid = (st[idx["l_uparm"], :3] + st[idx["r_uparm"], :3]) / 2
+            # If the hands would be inside a thigh, swing the arms just far enough forward to
+            # clear it (bisection, so the target moves smoothly); it always stays within reach.
+            def at(a):
+                return mid + np.array([sg * 0.035, -math.cos(a) * 0.95 * arm_len, math.sin(a) * 0.95 * arm_len])
+
+            lo = arm_angle
+            if thigh_overlap(st, at(lo), 0.025) > 0:
+                hi = lo
+                while hi < D(100) and thigh_overlap(st, at(hi), 0.025) > 0:
+                    hi += D(10)
+                for _ in range(14):
+                    m_ = (lo + hi) / 2
+                    lo, hi = (lo, m_) if thigh_overlap(st, at(m_), 0.025) <= 0 else (m_, hi)
+                lo = hi
+            target = at(lo)
+            pen = skin_penetration(st, side)
+            if pen > 0:  # forearms in front of the belly: push forward, then swing back onto the reach sphere
+                reach = np.linalg.norm(target - mid)
+                pushed = target.copy()
+                pushed[2] = max(pushed[2], wr[2] + pen)
+                target = mid + (pushed - mid) * (reach / np.linalg.norm(pushed - mid))
+            return wr - target
+        return ["uparm_ry", "uparm_rz", "elbow_bend"], residual
+
+    u_sw, r_sw = swing_goals(D(90) * sample(TIMELINES["kettlebell_swing"]["arm_keys"], 0.0))
+    SWING_LIMITS = {"uparm_ry": (-1.4, 2.9), "uparm_rz": (-1.2, 3.0)}  # hands meet at the midline
+    arm_keys_ = [f"{sd}_{u}" for sd in ("l", "r") for u in u_sw]
+    starts = {"swing seeds": {}, "deadlift arms": {k: rdl_start[k] for k in arm_keys_ if k in rdl_start}}
+    for ry_ in (-0.9, -0.5):
+        for rz_ in (0.2, 0.6):
+            starts[f"ry {ry_} rz {rz_}"] = {f"{sd}_uparm_ry": ry_ for sd in ("l", "r")} | \
+                {f"{sd}_uparm_rz": rz_ for sd in ("l", "r")} | {f"{sd}_elbow_bend": 0.2 for sd in ("l", "r")}
+    best_sw = None
+    for label_, extra in starts.items():
+        cand = solve_arms({**swing_pose(0.0, 0.0), **rdl_fixed, **extra}, u_sw, r_sw, iterations=60, limits=SWING_LIMITS)
+        print(f"    swing hold from {label_}: error {solve_arms.last_error:.4f}")
+        if best_sw is None or solve_arms.last_error < best_sw[0]:
+            best_sw = (solve_arms.last_error, cand)
+    swing_err, swing_start = best_sw
+    print(f"  swing: hold solve error {swing_err:.4f}")
+    if os.environ.get("FORMA_DIAG"):
+        _, st_ = evaluate(swing_start)
+        for sd in ("l", "r"):
+            sh_, el_, wr_ = arm_points(st_, sd)
+            print(f"    {sd}: residual {np.round(r_sw(st_, sd), 3)}, shoulder {np.round(sh_, 3)}, wrist {np.round(wr_, 3)}, "
+                  f"elbow flexion {math.degrees(flexion(sh_, el_, wr_)):.0f}°, arm length {arm_len:.3f} m")
+            for u in u_sw:
+                nm = f"{sd}_{u}"
+                print(f"      {nm} = {swing_start.get(nm, 0.0):.3f}  limits {SWING_LIMITS.get(u, tuple(np.round(m.pose_limits[m.index(nm)], 3)))}")
+        raise SystemExit("FORMA_DIAG: stopped after the swing set-up (nothing written).")
+
+    TWISTS = {"squat": twist, "biceps_curl": twist, "shoulder_press": press_twist,
+              "romanian_deadlift": rdl_twist, "split_squat": 0.0, "goblet_squat": goblet_twist,
+              "kettlebell_swing": rdl_twist, "bent_over_row": row_twist, "lateral_raise": lr_best[2]}
+    SEEDS = {"shoulder_press": press_start, "romanian_deadlift": rdl_start, "goblet_squat": goblet_start,
+             "bent_over_row": row_start, "lateral_raise": raise_start, "kettlebell_swing": swing_start}
+    FIXED = {"romanian_deadlift": rdl_fixed, "kettlebell_swing": rdl_fixed, "lateral_raise": raise_fixed}
+    LIMITS = {"shoulder_press": PRESS_LIMITS, "goblet_squat": PRESS_LIMITS, "bent_over_row": PRESS_LIMITS,
+              "lateral_raise": PRESS_LIMITS, "kettlebell_swing": SWING_LIMITS}
+    STANCE_WIDEN = {"kettlebell_swing": 0.07}  # metres per foot: a little wider than hip-width
+
+    def goals_for(clip: str, amount: float, t: float):
         if clip == "biceps_curl":
             return curl_goals(amount)
         if clip == "shoulder_press":
@@ -567,7 +949,17 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
             return rdl_goals(amount)
         if clip == "split_squat":
             return squat_goals(0.0, hang_offset)  # arms hang by the sides
+        if clip == "goblet_squat":
+            return goblet_goals(amount)
+        if clip == "bent_over_row":
+            return row_goals(amount)
+        if clip == "lateral_raise":
+            return raise_goals(amount)
+        if clip == "kettlebell_swing":
+            return swing_goals(D(90) * sample(TIMELINES[clip]["arm_keys"], t))
         return squat_goals(amount, hang_offset)
+
+    hold_states: dict = {}  # first-frame skeletons, to place the kettlebells in the hands
 
     # Bake every clip.
     frames = int(DURATION * FPS) + 1
@@ -578,16 +970,17 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
         lt_all, lq_all = [], []
         prev: dict = {}
         prev_legs: dict = {}
-        worst_ik = 0.0
+        worst_ik, worst_t = 0.0, 0.0
+        stance = rest_ankles + np.array([[STANCE_WIDEN.get(clip, 0.0), 0, 0], [-STANCE_WIDEN.get(clip, 0.0), 0, 0]])
         floor_min, floor_max, drift_max, hand_thigh = 1e9, -1e9, 0.0, 1e9
+        trunk_overlap = 0.0
         for t in times:
             amount = sample(tl["keys"], float(t))
             pose = POSES[clip](amount, TWISTS[clip])
             if clip == "biceps_curl":
                 pose = with_humerus_twist(pose)
-            if clip == "romanian_deadlift":
-                pose = {**pose, **rdl_fixed}
-            unknowns, residual = goals_for(clip, amount)
+            pose = {**pose, **FIXED.get(clip, {})}
+            unknowns, residual = goals_for(clip, amount, float(t))
             for u in unknowns:  # warm start from the previous frame (or the pre-solved start pose)
                 for side in ("l", "r"):
                     key = f"{side}_{u}"
@@ -595,8 +988,19 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
                         pose[key] = prev[key]
                     elif key in SEEDS.get(clip, {}):
                         pose[key] = SEEDS[clip][key]
-            pose = solve_arms(pose, unknowns, residual, limits=PRESS_LIMITS if clip == "shoulder_press" else None)
-            worst_ik = max(worst_ik, solve_arms.last_error)
+            pose = solve_arms(pose, unknowns, residual, limits=LIMITS.get(clip))
+            if solve_arms.last_error > 0.005:  # stuck: more iterations, then a restart from the seed
+                pose = solve_arms(pose, unknowns, residual, iterations=40, limits=LIMITS.get(clip))
+                if solve_arms.last_error > 0.005 and clip in SEEDS:
+                    first_err = solve_arms.last_error
+                    retry = solve_arms({**pose, **{k: v for k, v in SEEDS[clip].items() if any(k.endswith(u) for u in unknowns)}},
+                                       unknowns, residual, iterations=40, limits=LIMITS.get(clip))
+                    if solve_arms.last_error < first_err:
+                        pose = retry
+                    else:
+                        solve_arms.last_error = first_err
+            if solve_arms.last_error > worst_ik:
+                worst_ik, worst_t = solve_arms.last_error, float(t)
             prev = pose
             if clip == "split_squat":
                 pose = {**pose, **(prev_legs or {k: split_start[k] for k in split_unknowns}), "r_ball_bend": split_toe}
@@ -606,13 +1010,16 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
                 v, s = evaluate(pose)
                 drift_max = max(drift_max, float(max(np.abs(s[ankles[k], :3] - split_targets[k]).max() for k in (0, 1))))
             else:
-                pose = plant_feet(pose)
+                pose = plant_feet(pose, widen=STANCE_WIDEN.get(clip, 0.0))
                 v, s = evaluate(pose)
                 delta = (rest_ankles - s[ankles, :3]).mean(0)       # plant the feet (sagittal + height)
                 v, s = evaluate(pose, delta)
-                drift_max = max(drift_max, float(np.abs(s[ankles, :3] - rest_ankles).max()))
+                drift_max = max(drift_max, float(np.abs(s[ankles, :3] - stance).max()))
+            if clip not in hold_states:
+                hold_states[clip] = s.copy()
             floor_min, floor_max = min(floor_min, v[:, 1].min()), max(floor_max, v[:, 1].min())
             for side in ("l", "r"):
+                trunk_overlap = max(trunk_overlap, skin_penetration(s, side))
                 hand = s[idx[f"{side}_wrist"], :3]
                 hip, knee = s[idx[f"{side}_upleg"], :3], s[idx[f"{side}_lowleg"], :3]
                 u = np.clip(np.dot(hand - hip, knee - hip) / np.dot(knee - hip, knee - hip), 0, 1)
@@ -630,7 +1037,8 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
                    "minWristToThighAxisM": round(hand_thigh, 3)},
         })
         print(f"✓ {clip}: drift {drift_max*1000:.1f} mm, floor {floor_min:.3f}..{floor_max:.3f} m, "
-              f"wrist–thigh axis ≥ {hand_thigh*100:.1f} cm, worst solve error {worst_ik:.4f}")
+              f"wrist–thigh axis ≥ {hand_thigh*100:.1f} cm, hand/forearm clearance short by ≤ {trunk_overlap*100:.1f} cm, "
+              f"worst solve error {worst_ik:.4f} at {worst_t:.2f} s")
 
     # Joints animated in ANY clip get a channel in EVERY clip (no stale poses when switching).
     rot_joints = sorted({j for lt, lq in clips.values() for j in np.flatnonzero(
@@ -737,10 +1145,11 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     g.doc["nodes"].append({"name": "Avatar", "mesh": 0, "skin": 0})
     scene_nodes = roots + [len(g.doc["nodes"]) - 1]
 
-    # Dumbbells, rigidly attached to each wrist joint. The app shows the mesh named
-    # "Dumbbells" only for exercises with the dumbbell prop (the biceps curl).
+    # Props, rigidly attached to the wrist joints. The app shows each prop mesh ("Dumbbells",
+    # "KettlebellGoblet", "KettlebellSwing") only for the exercises that use it.
     g.doc["materials"].append({"name": "Prop", "pbrMetallicRoughness": {
-        "baseColorFactor": [0.10, 0.11, 0.12, 1], "metallicFactor": 0.6, "roughnessFactor": 0.35}})
+        "baseColorFactor": [0.10, 0.11, 0.12, 1], "metallicFactor": 0.6, "roughnessFactor": 0.35},
+        "doubleSided": True})
     db_pos, db_nrm, db_tri, db_joint = [], [], [], []
     for side in ("l", "r"):
         w, mid, ind, pin = fingers[side]
@@ -767,6 +1176,53 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
         "material": 1}]})
     g.doc["nodes"].append({"name": "Dumbbells", "mesh": 1, "skin": 0})
     scene_nodes.append(len(g.doc["nodes"]) - 1)
+
+    # Kettlebells: placed between the hands in the exercise's first frame, then expressed in
+    # the right wrist's bind frame so the skin carries them (rigidly, with the right hand).
+    def wrist_matrix(state: np.ndarray) -> np.ndarray:
+        M = np.eye(4)
+        M[:3, :3] = quat_to_mat(state[idx["r_wrist"], 3:7]) * state[idx["r_wrist"], 7]  # same as the IBMs
+        M[:3, 3] = state[idx["r_wrist"], :3]
+        return M
+
+    def palm_mid(state: np.ndarray) -> np.ndarray:
+        pts = []
+        for side in ("l", "r"):
+            w, mid_, _ind, _pin = fingers[side]
+            pts.append(state[w, :3] + 0.55 * (state[mid_, :3] - state[w, :3]))
+        return (pts[0] + pts[1]) / 2
+
+    def add_kettlebell(name: str, state: np.ndarray, below: np.ndarray) -> None:
+        _hips, up, left, fwd = torso_frame(state)
+        handle = palm_mid(state)
+        p_, n_, t_ = kettlebell(handle, below / np.linalg.norm(below), left)
+        to_bind = wrist_matrix(s0) @ np.linalg.inv(wrist_matrix(state))
+        p_ = (to_bind[:3, :3] @ p_.T).T + to_bind[:3, 3]
+        n_ = (to_bind[:3, :3] @ n_.T).T
+        n_ /= np.linalg.norm(n_, axis=1, keepdims=True)
+        j_ = np.zeros((len(p_), 4), np.uint16)
+        j_[:, 0] = idx["r_wrist"]
+        w_ = np.zeros((len(p_), 4), np.float32)
+        w_[:, 0] = 1.0
+        mesh_index = len(g.doc["meshes"])
+        g.doc["meshes"].append({"name": name, "primitives": [{
+            "attributes": {
+                "POSITION": g.accessor(p_.astype(np.float32), "VEC3", ARRAY_BUFFER, minmax=True),
+                "NORMAL": g.accessor(n_.astype(np.float32), "VEC3", ARRAY_BUFFER),
+                "JOINTS_0": g.accessor(j_, "VEC4", ARRAY_BUFFER),
+                "WEIGHTS_0": g.accessor(w_, "VEC4", ARRAY_BUFFER),
+            },
+            "indices": g.accessor(t_.reshape(-1).astype(np.uint16), "SCALAR", ELEMENT_ARRAY_BUFFER),
+            "material": 1}]})
+        g.doc["nodes"].append({"name": name, "mesh": mesh_index, "skin": 0})
+        scene_nodes.append(len(g.doc["nodes"]) - 1)
+
+    # Goblet: the bell hangs below the hands along the torso; swing: along the arms.
+    gs = hold_states["goblet_squat"]
+    add_kettlebell("KettlebellGoblet", gs, -torso_frame(gs)[1])
+    ss = hold_states["kettlebell_swing"]
+    arm_dir = palm_mid(ss) - (ss[idx["l_uparm"], :3] + ss[idx["r_uparm"], :3]) / 2
+    add_kettlebell("KettlebellSwing", ss, arm_dir)
     g.doc["scenes"][0]["nodes"] = scene_nodes
 
     for clip, (lt, lq) in clips.items():

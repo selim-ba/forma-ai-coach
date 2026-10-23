@@ -40,6 +40,20 @@ function presetPosition(view: View, distance: number) {
   );
 }
 
+/**
+ * Render the scene smaller and centred in the top (height - inset) pixels of the canvas.
+ * With a virtual full view k = (h - inset) / h the size of the canvas, the window offset
+ * that centres it horizontally and pins it to the top is ((k·w - w) / 2, 0).
+ */
+function applyInset(camera: THREE.PerspectiveCamera, w: number, h: number, inset: number) {
+  if (inset < 0.5 || w === 0 || h === 0) {
+    camera.clearViewOffset();
+    return;
+  }
+  const k = (h - inset) / h;
+  camera.setViewOffset(w * k, h * k, (w * k - w) / 2, 0, w, h);
+}
+
 export function CameraControls() {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
@@ -61,6 +75,26 @@ export function CameraControls() {
     }
     tween.current = { from: camera.position.clone(), to, t: 0 };
   }, [view, viewNonce, distance, camera]);
+
+  // When the coach sheet covers the bottom of the view, shrink and lift the picture so the
+  // whole avatar stays visible above it (a projection offset: the orbit itself is unchanged).
+  const coachTop = useSceneStore((s) => s.coachTop);
+  const gl = useThree((s) => s.gl);
+  const inset = useRef(0);
+  useFrame((_, delta) => {
+    const rect = gl.domElement.getBoundingClientRect();
+    const target = coachTop === null ? 0 : Math.min(Math.max(rect.bottom - coachTop, 0), rect.height * 0.6);
+    const next = THREE.MathUtils.damp(inset.current, target, 10, delta);
+    if (Math.abs(next - inset.current) < 0.25 && Math.abs(next - target) < 0.5) {
+      if (inset.current !== target) {
+        inset.current = target;
+        applyInset(camera, size.width, size.height, target);
+      }
+      return;
+    }
+    inset.current = next;
+    applyInset(camera, size.width, size.height, next);
+  });
 
   useFrame((_, delta) => {
     const tw = tween.current;

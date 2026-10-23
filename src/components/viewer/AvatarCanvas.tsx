@@ -9,6 +9,7 @@ import { EXERCISES } from "@/lib/exercises/catalog";
 import { useSceneStore } from "@/lib/scene/store";
 import { AvatarModel } from "./AvatarModel";
 import { CameraControls } from "./CameraControls";
+import { CueOverlay } from "./CueOverlay";
 
 /** Soft radial "contact shadow" — a single textured quad, far cheaper than real shadows on iPhone. */
 function FloorShadow() {
@@ -153,6 +154,7 @@ export default function AvatarCanvas() {
         <FloorShadow />
         <Suspense fallback={null}>
           <AvatarModel url={source.url} />
+          <CueOverlay />
         </Suspense>
         <CameraControls />
       </Canvas>

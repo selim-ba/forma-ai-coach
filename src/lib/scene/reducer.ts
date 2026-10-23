@@ -1,3 +1,4 @@
+import { CUES } from "@/lib/cues/catalog";
 import { EXERCISES, phaseProgress } from "@/lib/exercises/catalog";
 import type {
   CommandResult,
@@ -15,6 +16,7 @@ export const INITIAL_SCENE: SceneState = {
   phase: "start",
   viewNonce: 0,
   seek: null,
+  cues: [],
 };
 
 function nextSeek(state: SceneState, progress: number) {
@@ -39,6 +41,7 @@ export function reduceCommand(
         playing: false,
         phase: "start",
         seek: nextSeek(state, 0),
+        cues: command.exerciseId === state.exerciseId ? state.cues : [],
       });
     case "play":
       return ok({ ...state, playing: true, phase: null });
@@ -73,7 +76,25 @@ export function reduceCommand(
         viewNonce: state.viewNonce + 1,
         phase: "start",
         seek: nextSeek(state, 0),
+        cues: [],
       });
+    case "show_cues": {
+      const foreign = command.cueIds.filter((id) => CUES[id].exerciseId !== state.exerciseId);
+      if (foreign.length) {
+        return {
+          state,
+          result: {
+            ok: false,
+            command,
+            reason: "unsupported_cue",
+            detail: `${foreign.join(", ")} ${foreign.length > 1 ? "are" : "is"} not a cue for ${EXERCISES[state.exerciseId].shortTitle}.`,
+          },
+        };
+      }
+      return ok({ ...state, cues: [...new Set(command.cueIds)] });
+    }
+    case "clear_cues":
+      return ok({ ...state, cues: [] });
   }
 }
 
@@ -128,5 +149,6 @@ export function toSnapshot(state: SceneState): SceneSnapshot {
     speed: state.speed,
     view: state.view,
     phase: state.phase,
+    cues: state.cues,
   };
 }

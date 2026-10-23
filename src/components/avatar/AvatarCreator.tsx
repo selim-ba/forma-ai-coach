@@ -38,7 +38,7 @@ type Phase =
 const STAGES = [
   { key: "upload", label: "Uploading photos" },
   { key: "shape", label: "Reading body shape and look" },
-  { key: "build", label: "Animating five exercises" },
+  { key: "build", label: "Animating nine exercises" },
 ] as const;
 
 /**
@@ -189,7 +189,7 @@ export function AvatarCreator({ codeRequired, onClose }: { codeRequired: boolean
           <div className="flex flex-col gap-4 pt-2">
             <p className="text-sm text-ink-muted">
               Three full-body photos (front, side and back) turn into a 3D avatar with your approximate body shape and
-              look, doing the five exercises. It takes about two minutes.
+              look, doing all nine exercises. It takes a few minutes.
             </p>
             <ul className="flex flex-col gap-1.5 text-sm text-ink-muted">
               <li>• Ask someone to take the photos from about 3 m away, at hip height.</li>

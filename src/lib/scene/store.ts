@@ -31,6 +31,9 @@ type SceneStore = {
   setAvatarStatus: (status: AvatarStatus) => void;
   setAvatarSource: (source: AvatarSource) => void;
   logNote: (source: CommandSource, label: string, ok: boolean, detail?: string) => void;
+  /** Top edge (viewport px) of the open coach sheet, or null when it's closed. */
+  coachTop: number | null;
+  setCoachTop: (top: number | null) => void;
 };
 
 const MAX_LOG = 60;
@@ -66,6 +69,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   },
   setAvatarStatus: (avatar) => set({ avatar }),
   setAvatarSource: (avatarSource) => set({ avatarSource }),
+  coachTop: null,
+  setCoachTop: (coachTop) => set({ coachTop }),
   logNote: (source, label, ok, detail) =>
     set({
       log: [

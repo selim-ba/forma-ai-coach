@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CUE_IDS, MAX_CUES } from "@/types/cues";
 import {
   COMMAND_TYPES,
   EXERCISE_IDS,
@@ -23,7 +24,7 @@ export const CONTROL_SCENE_TOOL = {
   name: CONTROL_SCENE_TOOL_NAME,
   description:
     "Control the Forma 3D exercise viewer. Commands run in order in the user's browser. " +
-    "Use select_exercise before seek_phase when switching exercise. Only phases listed for the exercise in the catalog are valid. " +
+    "Use select_exercise before seek_phase or show_cues when switching exercise. Only phases and cue ids listed for the exercise in the catalog are valid. " +
     "Set every argument that a command type does not use to null. " +
     "Put the short user-facing answer in `reply`; it is shown as-is if every command is accepted.",
   strict: true,
@@ -42,7 +43,7 @@ export const CONTROL_SCENE_TOOL = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["type", "exerciseId", "view", "speed", "phase"],
+          required: ["type", "exerciseId", "view", "speed", "phase", "cueIds"],
           properties: {
             type: { type: "string", enum: [...COMMAND_TYPES] },
             exerciseId: {
@@ -65,6 +66,11 @@ export const CONTROL_SCENE_TOOL = {
               enum: [...PHASES, null],
               description: "Required for seek_phase, otherwise null.",
             },
+            cueIds: {
+              type: ["array", "null"],
+              items: { type: "string", enum: [...CUE_IDS] },
+              description: `Required for show_cues: 1 to ${MAX_CUES} visual cue ids of the current exercise. Otherwise null.`,
+            },
           },
         },
       },
@@ -78,6 +84,7 @@ const FlatCommandSchema = z.object({
   view: z.enum(VIEWS).nullable().optional(),
   speed: z.number().nullable().optional(),
   phase: z.enum(PHASES).nullable().optional(),
+  cueIds: z.array(z.string()).nullable().optional(),
 });
 
 export const ControlSceneArgsSchema = z.object({
@@ -104,6 +111,8 @@ export function toSceneCommand(raw: unknown): SceneCommand | unknown {
       return { type: c.type, speed: c.speed };
     case "seek_phase":
       return { type: c.type, phase: c.phase };
+    case "show_cues":
+      return { type: c.type, cueIds: c.cueIds };
     default:
       return { type: c.type };
   }
