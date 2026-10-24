@@ -49,7 +49,9 @@ test("manual controls drive the scene", async ({ page }) => {
   await expect(app).toHaveAttribute("data-phase", "bottom");
   await expect(app).toHaveAttribute("data-playing", "false");
 
+  await page.getByTestId("exercise-picker").click();
   await page.getByTestId("exercise-biceps_curl").click();
+  await expect(page.getByTestId("exercise-sheet")).toBeHidden();
   await expect(app).toHaveAttribute("data-exercise", "biceps_curl");
   await expect(page.getByTestId("phase-bottom")).toBeDisabled();
   await expect(page.getByTestId("phase-top")).toBeEnabled();

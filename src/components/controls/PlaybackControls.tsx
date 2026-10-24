@@ -2,8 +2,8 @@
 
 import { Pause, Play, RotateCcw } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { EXERCISE_LIST, EXERCISES, supportedPhases } from "@/lib/exercises/catalog";
-import { playhead, useSceneStore } from "@/lib/scene/store";
+import { EXERCISES, supportedPhases } from "@/lib/exercises/catalog";
+import { playhead } from "@/lib/scene/store";
 import { useSceneController } from "@/hooks/useSceneController";
 import { PHASES, SPEEDS, type Phase } from "@/types/scene";
 
@@ -115,45 +115,5 @@ export function PlaybackControls() {
         })}
       </div>
     </section>
-  );
-}
-
-/** Compact exercise switch in the header; scrolls sideways when the tabs don't fit. */
-export function ExerciseTabs() {
-  const { scene, selectExercise } = useSceneController();
-  const missing = useSceneStore((s) => s.avatar.missing);
-  const list = useRef<HTMLDivElement>(null);
-
-  // Keep the selected tab in view (e.g. after the coach switches exercise).
-  useEffect(() => {
-    list.current
-      ?.querySelector<HTMLElement>('[aria-selected="true"]')
-      ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
-  }, [scene.exerciseId]);
-
-  return (
-    <div ref={list} role="tablist" aria-label="Exercise" className="no-scrollbar flex gap-0.5 overflow-x-auto rounded-full bg-white/6 p-0.5">
-      {EXERCISE_LIST.map((e) => {
-        const active = e.id === scene.exerciseId;
-        const unavailable = missing?.includes(e.id) ?? false;
-        return (
-          <button
-            key={e.id}
-            role="tab"
-            type="button"
-            aria-selected={active}
-            disabled={unavailable && !active}
-            title={unavailable ? "Not animated for this avatar" : e.title}
-            data-testid={`exercise-${e.id}`}
-            onClick={() => selectExercise(e.id)}
-            className={`min-h-10 shrink-0 whitespace-nowrap rounded-full px-3 text-sm font-semibold transition-colors disabled:opacity-35 ${
-              active ? "bg-ink text-surface" : "text-ink-muted active:bg-white/10"
-            }`}
-          >
-            {e.shortTitle}
-          </button>
-        );
-      })}
-    </div>
   );
 }

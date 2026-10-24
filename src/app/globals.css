@@ -73,6 +73,12 @@ body {
   }
 }
 
+/* Exercise picker: the sheet drops from the top over a dimmed backdrop. */
+.picker-sheet { animation: picker-drop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.picker-backdrop { animation: picker-fade 0.2s ease-out; }
+@keyframes picker-drop { from { transform: translateY(-16px); opacity: 0; } }
+@keyframes picker-fade { from { opacity: 0; } }
+
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 

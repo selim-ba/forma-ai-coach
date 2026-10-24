@@ -3,7 +3,8 @@
 import dynamic from "next/dynamic";
 import { MyAvatarButton } from "@/components/avatar/MyAvatarButton";
 import { CoachChat } from "@/components/coach/CoachChat";
-import { ExerciseTabs, PlaybackControls } from "@/components/controls/PlaybackControls";
+import { ExercisePicker } from "@/components/controls/ExercisePicker";
+import { PlaybackControls } from "@/components/controls/PlaybackControls";
 import { CueToggle } from "@/components/viewer/CueToggle";
 import { ViewPresets } from "@/components/viewer/ViewPresets";
 import { useVisualViewport } from "@/hooks/useVisualViewport";
@@ -43,8 +44,8 @@ export function FormaApp() {
         <span className="shrink-0 text-lg font-black tracking-tight">
           forma<span className="text-accent">.</span>
         </span>
-        <div className="ml-auto min-w-0">
-          <ExerciseTabs />
+        <div className="ml-auto flex min-w-0 justify-end">
+          <ExercisePicker />
         </div>
       </header>
 

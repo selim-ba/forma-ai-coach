@@ -12,6 +12,8 @@ export const ExerciseSchema = z.object({
   title: z.string().min(1),
   shortTitle: z.string().min(1),
   level: z.enum(["beginner", "intermediate"]),
+  /** Main area worked, shown in the exercise picker (e.g. "Legs", "Shoulders"). */
+  focus: z.string().min(1),
   /** GLB that contains the clip. Both MVP clips live in one shared-rig GLB. */
   animationUrl: z.string().startsWith("/"),
   /** Name of the AnimationClip inside the GLB. */
