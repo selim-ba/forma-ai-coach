@@ -33,6 +33,9 @@ from appearance import mirror_map
 from mhr_common import HERE, MHRModel
 
 REPO = HERE.parent.parent
+# Body shape of the default (generic) avatar: a lean, athletic build. Taken from AI-generated
+# test photos (not a real person); without it the generic body is MHR's average, which reads heavy.
+GENERIC_BODY = HERE / "generic_body.json"
 FPS, DURATION = 30, 4.0
 D = math.radians
 
@@ -344,7 +347,7 @@ def locals_from_state(state: np.ndarray, parents: np.ndarray):
 
 # --------------------------------------------------------------------------- build
 def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, mhr: MHRModel | None = None,
-          log=print) -> dict:
+          log=print, generic_body: Path | None = GENERIC_BODY) -> dict:
     """Bake the generic body (identity_path=None) or a personal one into out_path (+ .meta.json).
 
     Personal avatars read appearance.npz / texture_views.npz / view_*.jpg next to the identity
@@ -356,11 +359,14 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     base = np.zeros(P, np.float32)
     identity = np.zeros(m.identity_count, np.float32)
     personal = identity_path is not None
-    if personal:
-        data = json.loads(identity_path.read_text())
+    shape_file = identity_path if personal else (generic_body if generic_body and generic_body.is_file() else None)
+    if shape_file is not None:
+        data = json.loads(shape_file.read_text())
         identity = np.asarray(data["identity"], np.float32)
         for name, value in data.get("scales", {}).items():
             base[m.index(name)] = value
+        if not personal:
+            print(f"  generic body shape from {shape_file.name}")
 
     idx = {n: i for i, n in enumerate(m.joint_names)}
     ankles = [idx["l_talocrural"], idx["r_talocrural"]]
@@ -1260,11 +1266,13 @@ def main() -> None:
     ap.add_argument("--identity", type=Path, help="identity.json from reconstruct.py (omit for the generic body)")
     ap.add_argument("--name", default=None, help="output name (default: mhr-generic, or the identity folder name)")
     ap.add_argument("--no-texture", action="store_true", help="per-vertex photo colours only (no photo texture)")
+    ap.add_argument("--average-body", action="store_true", help="generic body: MHR's average shape, not generic_body.json")
     args = ap.parse_args()
     personal = args.identity is not None
     name = args.name or (args.identity.parent.name if personal else "mhr-generic")
     out_path = REPO / "public/models" / ("avatars" if personal else "") / f"{name}.glb"
-    build(args.identity, out_path, use_texture=not args.no_texture)
+    build(args.identity, out_path, use_texture=not args.no_texture,
+          generic_body=None if args.average_body else GENERIC_BODY)
 
 
 if __name__ == "__main__":

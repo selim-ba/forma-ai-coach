@@ -35,6 +35,7 @@ import torch
 from appearance import (best_projector, facing_label, fuse_colors, mirror_map, overlay_image, rasterize_ids,
                         sample_visible, texture_visibility)
 from mhr_common import HERE, MHRModel
+from silhouette_fit import refine_shape, save_inputs, view_inputs
 
 SAM_DIR_DEFAULT = HERE / "vendor" / "sam-3d-body"
 CKPT_DIR_DEFAULT = HERE / "checkpoints" / "sam-3d-body-dinov3"
@@ -119,7 +120,8 @@ def load_estimator(sam_dir: Path = SAM_DIR_DEFAULT, checkpoint_dir: Path = CKPT_
     return SAM3DBodyEstimator(sam_3d_body_model=model, model_cfg=cfg)
 
 
-def reconstruct(estimator, mhr: MHRModel, photos: list[Path], out_dir: Path, overlays: bool = True, log=print) -> dict:
+def reconstruct(estimator, mhr: MHRModel, photos: list[Path], out_dir: Path, overlays: bool = True, log=print,
+                fit_outline: bool = False) -> dict:
     """Photos of one person -> identity.json, appearance.npz, texture_views.npz and view crops in out_dir.
 
     Returns the identity record (also written to out_dir/identity.json), including any
@@ -136,7 +138,7 @@ def reconstruct(estimator, mhr: MHRModel, photos: list[Path], out_dir: Path, ove
 
     out_dir.mkdir(parents=True, exist_ok=True)
     faces = np.asarray(estimator.faces, np.int64)
-    shapes, scale_sets, heights, samples, views, tex_views = [], [], [], [], [], []
+    shapes, scale_sets, heights, samples, views, tex_views, fit_views = [], [], [], [], [], [], []
 
     def height_of(shape, scales):
         pose = np.zeros(len(mhr.pose_names), np.float32)
@@ -174,6 +176,7 @@ def reconstruct(estimator, mhr: MHRModel, photos: list[Path], out_dir: Path, ove
         tex_views.append({"uv": tex_uv, "weight": weight.astype(np.float32), "tex_weight": tex_weight,
                           "face_visible": face_visible, "colors": colors.astype(np.float32), "size": tex_size})
 
+        fit_views.append(view_inputs(img, person, project, view, shape))
         shapes.append(shape)
         scale_sets.append(scales)
         heights.append(height_of(shape, scales))
@@ -189,6 +192,17 @@ def reconstruct(estimator, mhr: MHRModel, photos: list[Path], out_dir: Path, ove
     # Fuse: element-wise median is robust to one bad view.
     shape = np.median(np.stack(shapes), axis=0)
     scales = np.median(np.stack(scale_sets), axis=0)
+    regressed_shape = shape.copy()
+    fit_report = {"applied": False, "notes": ["turned off"]}
+    if fit_outline:
+        # The regressor makes bodies too deep (reads as extra body fat): fit the outlines.
+        save_inputs(out_dir / "fit_inputs.npz", fit_views, faces)
+        try:
+            shape, fit_report = refine_shape(mhr, faces, fit_views, shape, log=log,
+                                             out_dir=out_dir if overlays else None)
+        except Exception as e:  # never lose the avatar over the refinement
+            fit_report = {"applied": False, "notes": [f"failed: {e}"]}
+            log(f"  ⚠ outline fit failed, keeping the regressed shape: {e}")
     height = height_of(shape, scales)
     spread = (max(heights) - min(heights)) if len(heights) > 1 else 0.0
     shape_dist = [float(np.linalg.norm(s_ - shape)) for s_ in shapes]
@@ -219,8 +233,11 @@ def reconstruct(estimator, mhr: MHRModel, photos: list[Path], out_dir: Path, ove
         "views": views,
         "perViewHeightM": [round(x, 3) for x in heights],
         "perViewShapeDistance": [round(x, 3) for x in shape_dist],
+        "regressedIdentity": [round(float(v), 6) for v in regressed_shape],
+        "outlineFit": fit_report,
         "warnings": warnings,
-        "source": f"SAM 3D Body (facebook/sam-3d-body-dinov3, SAM License), {len(shapes)} photo(s), body decoder, median fusion",
+        "source": f"SAM 3D Body (facebook/sam-3d-body-dinov3, SAM License), {len(shapes)} photo(s), body decoder, median fusion"
+                  + (", outline fit" if fit_report.get("applied") else ""),
         "created": dt.datetime.now().isoformat(timespec="seconds"),
         "note": "Approximate body shape from photos. Not a measurement. Delete this folder to remove it.",
     }
@@ -242,6 +259,8 @@ def main() -> None:
     ap.add_argument("--name", required=True, help="lowercase letters, digits and dashes, e.g. 'selim'")
     ap.add_argument("--sam-dir", type=Path, default=SAM_DIR_DEFAULT, help="clone of facebookresearch/sam-3d-body")
     ap.add_argument("--checkpoint-dir", type=Path, default=CKPT_DIR_DEFAULT)
+    ap.add_argument("--fit", action="store_true",
+                    help="experimental: refine the body shape to the photo outlines (silhouette_fit.py)")
     args = ap.parse_args()
 
     if not re.fullmatch(r"[a-z0-9-]{1,40}", args.name):
@@ -251,7 +270,7 @@ def main() -> None:
     print(f"  model loaded in {time.time() - started:.0f}s")
     out_dir = HERE / "private" / args.name
     try:
-        reconstruct(estimator, MHRModel(), args.photos, out_dir)
+        reconstruct(estimator, MHRModel(), args.photos, out_dir, fit_outline=args.fit)
     except ReconstructionError as e:
         sys.exit(str(e))
     path = out_dir / "identity.json"
