@@ -10,7 +10,7 @@ HTTP API (base URL printed by `modal deploy`):
     POST   /avatars                 multipart front, side, back (+ keep=true, body=male|female); header X-Avatar-Token
     GET    /avatars/{id}            {"state": queued|working|done|error, "stage", "message", "warnings", ...}
     GET    /avatars/{id}/model.glb  the avatar (once done)
-    DELETE /avatars/{id}            removes the avatar and anything left of the photos
+    DELETE /avatars/{id}            removes the avatar and anything left of the photos (kept avatars: needs X-Avatar-Token)
     POST   /warm                    start a worker ahead of time (header X-Avatar-Token)
 
 Privacy: the photos are deleted as soon as the avatar is built (or the build fails). Avatars
@@ -262,9 +262,13 @@ def api():
                             headers={"Cache-Control": "private, max-age=300"})
 
     @web.delete("/avatars/{avatar_id}")
-    def delete(avatar_id: str):
+    def delete(avatar_id: str, x_avatar_token: str | None = Header(default=None)):
         check_id(avatar_id)
         volume.reload()
+        st = read_status(avatar_id) or {}
+        if st.get("keep"):
+            # Kept avatars (the demo fallbacks) have public ids: only the token holder deletes them.
+            check_token(x_avatar_token)
         shutil.rmtree(AVATARS / avatar_id, ignore_errors=True)
         volume.commit()
         return {"deleted": True}

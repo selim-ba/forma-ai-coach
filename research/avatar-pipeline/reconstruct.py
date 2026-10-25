@@ -256,7 +256,7 @@ def reconstruct(estimator, mhr: MHRModel, photos: list[Path], out_dir: Path, ove
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("photos", type=Path, nargs="+", help="one or more photos of the same person")
-    ap.add_argument("--name", required=True, help="lowercase letters, digits and dashes, e.g. 'selim'")
+    ap.add_argument("--name", required=True, help="lowercase letters, digits and dashes, e.g. 'me'")
     ap.add_argument("--sam-dir", type=Path, default=SAM_DIR_DEFAULT, help="clone of facebookresearch/sam-3d-body")
     ap.add_argument("--checkpoint-dir", type=Path, default=CKPT_DIR_DEFAULT)
     ap.add_argument("--fit", action="store_true",
