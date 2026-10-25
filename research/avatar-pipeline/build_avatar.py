@@ -27,16 +27,17 @@ from pathlib import Path
 import numpy as np
 
 from glb_writer import ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER, GLB
-from hair import add_hair, head_weight, srgb_to_linear
+from hair import GENERIC_HAIR_SRGB, add_hair, head_weight, srgb_to_linear
 import texture
 from appearance import mirror_map
-from clothes import dress, extents_from_photo, garment_texture
+from clothes import FEMALE, dress, extents_from_photo, garment_texture
 from mhr_common import HERE, MHRModel
 
 REPO = HERE.parent.parent
 # Body shape of the default (generic) avatar: a lean, athletic build. Taken from AI-generated
 # test photos (not a real person); without it the generic body is MHR's average, which reads heavy.
 GENERIC_BODY = HERE / "generic_body.json"
+GENERIC_BODY_FEMALE = HERE / "generic_body_female.json"  # same idea, from AI-generated photos of a woman
 FPS, DURATION = 30, 4.0
 D = math.radians
 
@@ -301,6 +302,41 @@ def kettlebell(handle: np.ndarray, down: np.ndarray, across: np.ndarray, radius:
     return np.asarray(pos), np.asarray(nrm), np.asarray(tris, np.int64)
 
 
+def ponytail(root: np.ndarray):
+    """A ponytail hanging from `root` (back of the head, rest pose, metres): a tapered tube
+    along a gentle S-curve, closed at the tip. Returns (positions, normals, triangles)."""
+    ctrl = [root, root + np.array([0.0, 0.012, -0.06]), root + np.array([0.0, -0.08, -0.09]),
+            root + np.array([0.0, -0.215, -0.06])]
+    n_ring, n_seg = 16, 24
+    s = np.linspace(0, 1, n_seg)
+    b = [(1 - s) ** 3, 3 * s * (1 - s) ** 2, 3 * s ** 2 * (1 - s), s ** 3]
+    pts = sum(bi[:, None] * c for bi, c in zip(b, ctrl))
+    radius = np.interp(s, [0, 0.08, 0.25, 0.65, 0.9, 1], [0.014, 0.017, 0.031, 0.024, 0.012, 0.003])
+    tang = np.gradient(pts, axis=0)
+    tang /= np.linalg.norm(tang, axis=1, keepdims=True)
+    side = np.array([1.0, 0.0, 0.0])
+    pos, nrm, tris = [], [], []
+    for i in range(n_seg):
+        nvec = np.cross(tang[i], side)
+        nvec /= np.linalg.norm(nvec)
+        for k in range(n_ring):
+            a = 2 * np.pi * k / n_ring
+            d = np.cos(a) * side + np.sin(a) * nvec
+            pos.append(pts[i] + radius[i] * d)
+            nrm.append(d)
+    for i in range(n_seg - 1):
+        for k in range(n_ring):
+            a0, a1 = i * n_ring + k, i * n_ring + (k + 1) % n_ring
+            b0, b1 = a0 + n_ring, a1 + n_ring
+            tris += [[a0, b0, a1], [a1, b0, b1]]
+    tip = len(pos)
+    pos.append(pts[-1] + tang[-1] * 0.004)
+    nrm.append(tang[-1])
+    last = (n_seg - 1) * n_ring
+    tris += [[last + k, tip, last + (k + 1) % n_ring] for k in range(n_ring)]
+    return np.asarray(pos), np.asarray(nrm), np.asarray(tris, np.int64)
+
+
 # --------------------------------------------------------------------------- math
 def quat_to_mat(q: np.ndarray) -> np.ndarray:
     x, y, z, w = q / np.linalg.norm(q)
@@ -348,7 +384,8 @@ def locals_from_state(state: np.ndarray, parents: np.ndarray):
 
 # --------------------------------------------------------------------------- build
 def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, mhr: MHRModel | None = None,
-          log=print, generic_body: Path | None = GENERIC_BODY) -> dict:
+          log=print, generic_body: Path | None = GENERIC_BODY, hairstyle: str = "short",
+          female: bool = False) -> dict:
     """Bake the generic body (identity_path=None) or a personal one into out_path (+ .meta.json).
 
     Personal avatars read appearance.npz / texture_views.npz / view_*.jpg next to the identity
@@ -393,7 +430,8 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     garment_fields, clothes_info = None, None
     joints_rest = {n: s0[i, :3] for i, n in enumerate(m.joint_names)}
     if not personal:
-        v0, _garment_label, clothes_info, garment_fields = dress(v0, m.faces.astype(np.int64), joints_rest)
+        v0, _garment_label, clothes_info, garment_fields = dress(v0, m.faces.astype(np.int64), joints_rest,
+                                                                 FEMALE if female else None)
         print(f"  clothes: {clothes_info}")
     elif (identity_path.parent / "appearance.npz").is_file():
         # Photo avatars: the garments' shape follows what the person wore (sleeve and leg
@@ -402,8 +440,8 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
         if len(z["colors"]) == len(v0):
             ext, ext_info = extents_from_photo(v0, joints_rest, z["colors"].astype(np.float64) / 255.0, z["visible"])
             if ext:
-                v0, _garment_label, clothes_info, _fields = dress(v0, m.faces.astype(np.int64), joints_rest,
-                                                                   {**ext, "hem_ease": 0.004})
+                cut = {**(FEMALE if female else {}), **ext, "hem_ease": 0.004}
+                v0, _garment_label, clothes_info, _fields = dress(v0, m.faces.astype(np.int64), joints_rest, cut)
                 clothes_info = {**clothes_info, "fromPhoto": ext_info}
                 print(f"  clothes from the photos: {clothes_info}")
             else:
@@ -1101,6 +1139,7 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     v0, srgb, hair_info = add_hair(v0.astype(np.float64), normals, faces.astype(np.int64),
                                    head_weight(m.lbs_indices, m.lbs_weights, list(m.joint_names)), eye_mid, photo_srgb)
     print(f"  hair: {hair_info}")
+    hair_srgb_for_tail = np.asarray(hair_info.get("hairSRGB", GENERIC_HAIR_SRGB), np.float64)
     normals = np.zeros_like(v0)
     tri = v0[faces]
     fn = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
@@ -1257,6 +1296,33 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     ss = hold_states["kettlebell_swing"]
     arm_dir = palm_mid(ss) - (ss[idx["l_uparm"], :3] + ss[idx["r_uparm"], :3]) / 2
     add_kettlebell("KettlebellSwing", ss, arm_dir)
+
+    # Ponytail: a tapered tube tied at the back of the head, rigid with the head joint.
+    if hairstyle == "ponytail":
+        hw = head_weight(m.lbs_indices, m.lbs_weights, list(m.joint_names))
+        band = (hw > 0.9) & (np.abs(v0[:, 1] - (eye_mid[1] + 0.035)) < 0.015) & (np.abs(v0[:, 0] - eye_mid[0]) < 0.03)
+        if band.any():
+            back = v0[band][np.argmin(v0[band, 2])]
+            p_, n_, t_ = ponytail(back + np.array([0.0, 0.012, 0.006]))
+            j_ = np.zeros((len(p_), 4), np.uint16)
+            j_[:, 0] = idx["c_head"]
+            w_ = np.zeros((len(p_), 4), np.float32)
+            w_[:, 0] = 1.0
+            g.doc["materials"].append({"name": "Hair", "pbrMetallicRoughness": {
+                "baseColorFactor": [*srgb_to_linear(hair_srgb_for_tail).tolist(), 1], "metallicFactor": 0,
+                "roughnessFactor": 0.6}, "doubleSided": True})
+            g.doc["meshes"].append({"name": "Ponytail", "primitives": [{
+                "attributes": {
+                    "POSITION": g.accessor(p_.astype(np.float32), "VEC3", ARRAY_BUFFER, minmax=True),
+                    "NORMAL": g.accessor(n_.astype(np.float32), "VEC3", ARRAY_BUFFER),
+                    "JOINTS_0": g.accessor(j_, "VEC4", ARRAY_BUFFER),
+                    "WEIGHTS_0": g.accessor(w_, "VEC4", ARRAY_BUFFER),
+                },
+                "indices": g.accessor(t_.reshape(-1).astype(np.uint16), "SCALAR", ELEMENT_ARRAY_BUFFER),
+                "material": len(g.doc["materials"]) - 1}]})
+            g.doc["nodes"].append({"name": "Ponytail", "mesh": len(g.doc["meshes"]) - 1, "skin": 0})
+            scene_nodes.append(len(g.doc["nodes"]) - 1)
+            print("  hair: ponytail")
     g.doc["scenes"][0]["nodes"] = scene_nodes
 
     for clip, (lt, lq) in clips.items():
@@ -1295,12 +1361,17 @@ def main() -> None:
     ap.add_argument("--name", default=None, help="output name (default: mhr-generic, or the identity folder name)")
     ap.add_argument("--no-texture", action="store_true", help="per-vertex photo colours only (no photo texture)")
     ap.add_argument("--average-body", action="store_true", help="generic body: MHR's average shape, not generic_body.json")
+    ap.add_argument("--body", choices=["male", "female"], default="male",
+                    help="generic body: male (mhr-generic) or female (mhr-generic-f, with a ponytail)")
+    ap.add_argument("--hair", choices=["short", "ponytail"], default=None, help="hairstyle (default: by --body)")
     args = ap.parse_args()
     personal = args.identity is not None
-    name = args.name or (args.identity.parent.name if personal else "mhr-generic")
+    female = args.body == "female"
+    name = args.name or (args.identity.parent.name if personal else ("mhr-generic-f" if female else "mhr-generic"))
     out_path = REPO / "public/models" / ("avatars" if personal else "") / f"{name}.glb"
     build(args.identity, out_path, use_texture=not args.no_texture,
-          generic_body=None if args.average_body else GENERIC_BODY)
+          generic_body=None if args.average_body else (GENERIC_BODY_FEMALE if female else GENERIC_BODY),
+          hairstyle=args.hair or ("ponytail" if female else "short"), female=female)
 
 
 if __name__ == "__main__":

@@ -22,11 +22,13 @@ NONE, SHIRT, SHORTS = 0, 1, 2
 SHIRT_SRGB = np.array([0.22, 0.24, 0.29])   # charcoal-navy T-shirt
 SHORTS_SRGB = np.array([0.47, 0.48, 0.51])  # mid-grey shorts
 
-# Garment extents. sleeve_t / shorts_t run along the whole limb: 0..1 is the upper arm or thigh,
+# Garment extents (drape_taper: how fast, in cm per cm, the shirt may narrow below the chest). sleeve_t / shorts_t run along the whole limb: 0..1 is the upper arm or thigh,
 # 1..2 the forearm or shin (so 1.9 is a long sleeve or long trousers). hem_ease: extra width at
 # the shirt hem (a flare reads well on the generic body; photo avatars keep it small because the
 # real hem may be tucked in or elsewhere).
-GENERIC = {"sleeve_t": 0.42, "shirt_hem_below_root": 0.06, "shorts_t": 0.48, "hem_ease": 0.012}
+GENERIC = {"sleeve_t": 0.42, "shirt_hem_below_root": 0.06, "shorts_t": 0.48, "hem_ease": 0.012, "drape_taper": 0.25}
+# A women's T-shirt is cut closer to the waist: shorter, tapering faster below the bust.
+FEMALE = {"sleeve_t": 0.36, "shirt_hem_below_root": 0.035, "shorts_t": 0.42, "hem_ease": 0.005, "drape_taper": 0.7}
 ARM = (("uparm", "uparm", "lowarm"), ("forearm", "lowarm", "wrist"))
 LEG = (("thigh", "upleg", "lowleg"), ("shin", "lowleg", "talocrural"))
 
@@ -201,7 +203,7 @@ def dress(v: np.ndarray, faces: np.ndarray, joints: dict, extents: dict | None =
         center = np.array([0.0, cz])
         hr = _hull_radius(_hull(p2), center, ang_c)
         if y0 < chest_y and env is not None:
-            hr = np.maximum(hr, env - 0.0025)   # below the chest, fabric tapers at most 2.5 mm per cm
+            hr = np.maximum(hr, env - 0.01 * ext["drape_taper"])  # below the chest, fabric tapers this many mm per cm
         env = hr
         slice_r[round(y0, 3)] = (k, hr)
     for y0, (k, hr) in slice_r.items():

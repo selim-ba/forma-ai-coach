@@ -25,12 +25,44 @@ export const MHR_GENERIC_AVATAR: AvatarSource = {
   personal: false,
 };
 
-/** What the app shows when no ?avatar= is given. */
+export const MHR_GENERIC_FEMALE_AVATAR: AvatarSource = {
+  id: "mhr-generic-f",
+  url: "/models/mhr-generic-f.glb",
+  label: "generic body",
+  personal: false,
+};
+
+/** What the app shows when no ?avatar= is given (before the viewer's man/woman choice). */
 export const DEFAULT_AVATAR: AvatarSource = MHR_GENERIC_AVATAR;
+
+export type GenericBody = "male" | "female";
+const BODY_KEY = "forma-body";
+
+/** The default body this phone last chose (a per-device convenience; never required). */
+export function preferredBody(): GenericBody {
+  try {
+    return window.localStorage.getItem(BODY_KEY) === "female" ? "female" : "male";
+  } catch {
+    return "male";
+  }
+}
+
+export function setPreferredBody(body: GenericBody): void {
+  try {
+    window.localStorage.setItem(BODY_KEY, body);
+  } catch {
+    // private mode etc.: the choice just isn't remembered
+  }
+}
+
+export function isGenericBody(source: AvatarSource): boolean {
+  return source.id === MHR_GENERIC_AVATAR.id || source.id === MHR_GENERIC_FEMALE_AVATAR.id;
+}
 
 /**
  * Pick the avatar from the page URL:
- *   (none) | ?avatar=mhr-generic -> generic MHR body (default, deployed)
+ *   (none)                       -> generic body, man or woman as last chosen on this phone
+ *   ?avatar=mhr-generic(-f)      -> generic MHR body, man (default) or woman
  *   ?avatar=mannequin            -> procedural wooden mannequin
  *   ?avatar=r-<24 hex>           -> personal avatar made by the avatar service (services/avatar)
  *   ?avatar=<name>              -> personal avatar (public/models/avatars/<name>.glb, git-ignored, local only)
@@ -46,9 +78,12 @@ export function resolveAvatar(search: string): AvatarSource {
 
 function pickAvatar(search: string): AvatarSource {
   const id = new URLSearchParams(search).get("avatar");
-  if (!id || !/^[a-z0-9-]{1,40}$/.test(id)) return DEFAULT_AVATAR;
+  if (!id || !/^[a-z0-9-]{1,40}$/.test(id)) {
+    return typeof window !== "undefined" && preferredBody() === "female" ? MHR_GENERIC_FEMALE_AVATAR : DEFAULT_AVATAR;
+  }
   if (id === "mannequin") return MANNEQUIN_AVATAR;
   if (id === "mhr-generic") return MHR_GENERIC_AVATAR;
+  if (id === "mhr-generic-f") return MHR_GENERIC_FEMALE_AVATAR;
   if (REMOTE_AVATAR_ID.test(id) && AVATAR_SERVICE_URL) {
     return { id, url: remoteGlbUrl(id), label: "approximate body from your photos", personal: true, remote: true };
   }
