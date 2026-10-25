@@ -30,6 +30,7 @@ from glb_writer import ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER, GLB
 from hair import add_hair, head_weight, srgb_to_linear
 import texture
 from appearance import mirror_map
+from clothes import dress, garment_texture
 from mhr_common import HERE, MHRModel
 
 REPO = HERE.parent.parent
@@ -386,6 +387,14 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     base[m.index("root_ty")] += -float(v0[:, 1].min()) * 10  # metres -> 10 cm units
     v0, s0 = evaluate({})
     rest_ankles = s0[ankles, :3].copy()
+
+    # Clothes (generic body): reshape the rest mesh into a T-shirt and shorts that drape like
+    # fabric, before anything measures the body, so clearances account for the garments.
+    garment_fields, clothes_info = None, None
+    if not personal:
+        joints_rest = {n: s0[i, :3] for i, n in enumerate(m.joint_names)}
+        v0, _garment_label, clothes_info, garment_fields = dress(v0, m.faces.astype(np.int64), joints_rest)
+        print(f"  clothes: {clothes_info}")
 
     # Solve forearm twist so the palms face forward at the curl's start (supinated grip).
     fingers = {side: [idx[f"{side}_wrist"], idx[f"{side}_middle1"], idx[f"{side}_index1"], idx[f"{side}_pinky1"]]
@@ -1131,6 +1140,10 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
         print(f"  photo texture: {tex['info']}")
     elif personal and use_texture:
         print("  no texture_views.npz: re-run reconstruct.py to get the sharper photo texture")
+    garment_uv = None
+    if tex is None and garment_fields is not None:  # crisp garment edges from a tiny texture
+        garment_uv, garment_png = garment_texture(garment_fields, srgb_to_linear(np.array([0.93, 0.90, 0.87])))
+        pbr["baseColorTexture"] = {"index": g.texture(garment_png, "image/png")}
     g.doc["materials"].append({"name": "Skin", "pbrMetallicRoughness": pbr})
     attrs = {
         "POSITION": g.accessor(out_v.astype(np.float32), "VEC3", ARRAY_BUFFER, minmax=True),
@@ -1141,6 +1154,8 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     }
     if tex is not None:
         attrs["TEXCOORD_0"] = g.accessor(tex["uv"].astype(np.float32), "VEC2", ARRAY_BUFFER)
+    elif garment_uv is not None:
+        attrs["TEXCOORD_0"] = g.accessor(garment_uv, "VEC2", ARRAY_BUFFER)
     faces = out_faces
     ind_type = np.uint16 if len(out_v) < 65535 else np.uint32
     g.doc["meshes"].append({"name": "Avatar", "primitives": [{
@@ -1250,7 +1265,7 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
         "personal": personal, "units": "metres", "up": "+Y", "forward": "+Z",
         "bytes": out_path.stat().st_size, "vertices": int(len(v0)), "joints": n_j,
         "animatedJoints": {"rotation": len(rot_joints), "translation": len(pos_joints)},
-        "heightM": round(float(v0[:, 1].max()), 3), "palmTwist": round(twist, 3), "hair": hair_info,
+        "heightM": round(float(v0[:, 1].max()), 3), "palmTwist": round(twist, 3), "hair": hair_info, "clothes": clothes_info,
         "texture": tex["info"] if tex is not None else None,
         "clips": report,
     }

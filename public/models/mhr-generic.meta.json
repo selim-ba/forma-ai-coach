@@ -5,7 +5,7 @@
   "units": "metres",
   "up": "+Y",
   "forward": "+Z",
-  "bytes": 2189236,
+  "bytes": 2337348,
   "vertices": 18439,
   "joints": 127,
   "animatedJoints": {
@@ -18,6 +18,13 @@
     "source": "template",
     "vertices": 391,
     "maxThicknessMm": 24.0
+  },
+  "clothes": {
+    "shirtVertices": 2236,
+    "shortsVertices": 420,
+    "maxOffsetMm": 45.8,
+    "meanOffsetMm": 9.9,
+    "neckRadiusMm": 64.4
   },
   "texture": null,
   "clips": [
@@ -90,7 +97,7 @@
           -0.0008,
           0.0
         ],
-        "minWristToThighAxisM": 0.244
+        "minWristToThighAxisM": 0.252
       }
     },
     {
