@@ -2,6 +2,7 @@
 
 import { Camera, Check, Loader2, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { preferredBody, type GenericBody } from "@/lib/avatar/source";
 import {
   fetchRemoteStatus,
   prepareJpeg,
@@ -49,6 +50,7 @@ const STAGES = [
 export function AvatarCreator({ codeRequired, onClose }: { codeRequired: boolean; onClose: () => void }) {
   const [phase, setPhase] = useState<Phase>({ name: "intro" });
   const [consent, setConsent] = useState(false);
+  const [body, setBody] = useState<GenericBody>(() => preferredBody());
   const [code, setCode] = useState(() => {
     try {
       return localStorage.getItem("forma.accessCode") ?? "";
@@ -136,6 +138,7 @@ export function AvatarCreator({ codeRequired, onClose }: { codeRequired: boolean
     setStarted(Date.now());
     const form = new FormData();
     for (const v of VIEWS) form.append(v, photos[v]!.blob, `${v}.jpg`);
+    form.append("body", body);
     if (codeRequired) form.append("code", code);
     try {
       const res = await fetch("/api/avatar", { method: "POST", body: form });
@@ -196,6 +199,26 @@ export function AvatarCreator({ codeRequired, onClose }: { codeRequired: boolean
               <li>• Head to toe in the frame, fitted clothes, plain background if possible.</li>
               <li>• Same spot, distance and light for all three.</li>
             </ul>
+            <div className="flex flex-col gap-1.5 text-sm">
+              <span className="text-ink-muted">Hair and clothing cut</span>
+              <div role="group" aria-label="Hair and clothing cut" className="flex rounded-full bg-white/8 p-0.5">
+                {(["male", "female"] as const).map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    aria-pressed={body === b}
+                    onClick={() => setBody(b)}
+                    className={`min-h-10 flex-1 rounded-full text-sm font-semibold ${
+                      body === b ? "bg-ink text-surface" : "text-ink-muted active:bg-white/10"
+                    }`}
+                    data-testid={`avatar-body-${b}`}
+                  >
+                    {b === "male" ? "Man" : "Woman"}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-ink-muted/80">Your body shape always comes from the photos.</span>
+            </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-ink-muted">
               <p className="mb-1 font-semibold text-ink">Your photos</p>
               The photos are sent to a cloud server (Modal, in the US) that builds the avatar, and are deleted as soon as

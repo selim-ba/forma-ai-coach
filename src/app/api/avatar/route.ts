@@ -7,7 +7,7 @@ import { clientKey, createRateLimiter } from "@/lib/server/rate-limit";
  * progress and downloads the avatar from the service directly, by its random id.
  *
  *   GET  /api/avatar          -> { enabled, codeRequired }
- *   POST /api/avatar          multipart: front, side, back (JPEG), code?  -> { id }
+ *   POST /api/avatar          multipart: front, side, back (JPEG), body (male|female), code?  -> { id }
  *   POST /api/avatar?warm=1   start a worker early (no photos)
  */
 export const runtime = "nodejs";
@@ -81,6 +81,7 @@ export async function POST(req: Request) {
     upstream.append(view, file, `${view}.jpg`);
   }
   upstream.append("keep", "false");
+  upstream.append("body", form.get("body") === "female" ? "female" : "male");
 
   try {
     const res = await fetch(`${url}/avatars`, {

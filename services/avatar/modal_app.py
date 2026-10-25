@@ -7,7 +7,7 @@ for the five exercise clips.
     modal deploy services/avatar/modal_app.py      # from the repo root, see services/avatar/README.md
 
 HTTP API (base URL printed by `modal deploy`):
-    POST   /avatars                 multipart front, side, back (+ keep=true); header X-Avatar-Token
+    POST   /avatars                 multipart front, side, back (+ keep=true, body=male|female); header X-Avatar-Token
     GET    /avatars/{id}            {"state": queued|working|done|error, "stage", "message", "warnings", ...}
     GET    /avatars/{id}/model.glb  the avatar (once done)
     DELETE /avatars/{id}            removes the avatar and anything left of the photos
@@ -120,7 +120,7 @@ class Worker:
         return "ready"
 
     @modal.method()
-    def run(self, avatar_id: str) -> None:
+    def run(self, avatar_id: str, body: str = "male") -> None:
         from build_avatar import build
         from reconstruct import ReconstructionError, reconstruct
 
@@ -142,7 +142,9 @@ class Worker:
             write_status(avatar_id, stage="build", message="Animating your avatar…",
                          warnings=identity.get("warnings", []), views=identity.get("views", []),
                          heightM=identity.get("estimatedHeightM"))
-            build(work / "identity.json", folder / "model.glb", use_texture=True, mhr=self.mhr, log=log)
+            female = body == "female"  # women's cut and a ponytail; the body shape comes from the photos
+            build(work / "identity.json", folder / "model.glb", use_texture=True, mhr=self.mhr, log=log,
+                  hairstyle="ponytail" if female else "short", female=female)
             write_status(avatar_id, state="done", stage="done", message="Your avatar is ready.",
                          seconds=round(time.time() - started))
         except ReconstructionError as e:
@@ -209,8 +211,10 @@ def api():
         side: UploadFile = File(...),
         back: UploadFile = File(...),
         keep: bool = Form(False),
+        body: str = Form("male"),
         x_avatar_token: str | None = Header(default=None),
     ):
+        body = body if body in ("male", "female") else "male"
         check_token(x_avatar_token)
         avatar_id = "r-" + secrets.token_hex(12)
         folder = AVATARS / avatar_id / "photos"
@@ -223,8 +227,8 @@ def api():
                     raise HTTPException(status_code=413, detail=f"{view} photo is empty or too large")
                 (folder / f"{view}.jpg").write_bytes(data)
             write_status(avatar_id, state="queued", stage="queued", message="Waiting for a worker…",
-                         created=time.time(), keep=bool(keep), warnings=[])
-            Worker().run.spawn(avatar_id)
+                         created=time.time(), keep=bool(keep), body=body, warnings=[])
+            Worker().run.spawn(avatar_id, body)
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001 — the caller holds the token; give it the cause
