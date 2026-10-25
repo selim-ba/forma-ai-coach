@@ -25,11 +25,11 @@ describe("exercise catalog", () => {
   });
 
   it("lowering exercises have a bottom marker; lifting ones a top and no bottom", () => {
-    for (const id of ["squat", "romanian_deadlift", "split_squat", "goblet_squat"] as const) {
+    for (const id of ["squat", "romanian_deadlift", "split_squat"] as const) {
       expect(EXERCISES[id].availablePhases.bottom, id).toBeDefined();
       expect(EXERCISES[id].availablePhases.top, id).toBeUndefined();
     }
-    for (const id of ["biceps_curl", "shoulder_press", "bent_over_row", "lateral_raise"] as const) {
+    for (const id of ["biceps_curl", "shoulder_press", "lateral_raise"] as const) {
       expect(EXERCISES[id].availablePhases.top, id).toBeDefined();
       expect(EXERCISES[id].availablePhases.bottom, id).toBeUndefined();
     }

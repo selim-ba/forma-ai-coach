@@ -6,7 +6,7 @@ import type { Exercise } from "./schema";
  * and coaching content. The GPT coach is only allowed to repeat these cues.
  *
  * Phase markers are authored against the clips baked by
- * research/avatar-pipeline/build_avatar.py (TIMELINES, all nine exercises; the default
+ * research/avatar-pipeline/build_avatar.py (TIMELINES, all seven exercises; the default
  * MHR body and personal avatars). The wooden mannequin (scripts/build-mannequin.ts,
  * src/lib/avatar/motions.ts) only has the squat and the curl, with the same markers.
  * Tests check these numbers against both GLBs' metadata.
@@ -204,44 +204,6 @@ export const EXERCISES: Record<ExerciseId, Exercise> = {
       note: "Conservative, widely used cues. Have a qualified coach review them before public use.",
     },
   },
-  goblet_squat: {
-    id: "goblet_squat",
-    title: "Kettlebell goblet squat",
-    shortTitle: "Goblet",
-    level: "beginner",
-    focus: "Legs",
-    animationUrl: MODEL_URL,
-    clipName: "goblet_squat",
-    clipDuration: 4,
-    availablePhases: {
-      start: 0,
-      middle: 0.2625, // halfway through the 1.5 s descent
-      bottom: 0.5, // centre of the 0.4 s hold at depth
-    },
-    availableViews: ["front", "side", "three_quarter"],
-    defaultView: "three_quarter",
-    props: ["kettlebell_goblet"],
-    coachPrompt: "Show a goblet squat from the side",
-    summary:
-      "A squat holding one kettlebell by the horns against the chest: 1.5 s descent, short pause at depth, controlled rise. The weight in front helps keep the torso upright.",
-    reviewedCues: [
-      "Hold the kettlebell by the horns, close to your chest, elbows pointing down.",
-      "Stand with feet about shoulder-width apart, toes pointing forward or slightly out.",
-      "Sit down between your heels, keeping your chest up and the kettlebell close.",
-      "Let your knees travel in the same direction as your toes.",
-      "Keep your whole foot on the floor and push the floor away to stand up.",
-      "Start with a light kettlebell and only go as deep as you can while staying in control.",
-    ],
-    limitations: [
-      "Generic demonstration body; it does not represent your body proportions.",
-      "The depth shown is one demo range; comfortable depth varies from person to person.",
-      "Educational visual only; not medical or injury-prevention advice. Stop if anything hurts.",
-    ],
-    review: {
-      status: "pending_expert_review",
-      note: "Conservative, widely used cues. Have a qualified coach review them before public use.",
-    },
-  },
   kettlebell_swing: {
     id: "kettlebell_swing",
     title: "Kettlebell swing",
@@ -273,44 +235,6 @@ export const EXERCISES: Record<ExerciseId, Exercise> = {
     limitations: [
       "Generic demonstration body; it does not represent your body proportions.",
       "Shown at demo speed; a real swing is one smooth, continuous rhythm driven by the hips.",
-      "Educational visual only; not medical or injury-prevention advice. Stop if anything hurts.",
-    ],
-    review: {
-      status: "pending_expert_review",
-      note: "Conservative, widely used cues. Have a qualified coach review them before public use.",
-    },
-  },
-  bent_over_row: {
-    id: "bent_over_row",
-    title: "Bent-over dumbbell row",
-    shortTitle: "Row",
-    level: "beginner",
-    focus: "Back",
-    animationUrl: MODEL_URL,
-    clipName: "bent_over_row",
-    clipDuration: 4,
-    availablePhases: {
-      start: 0,
-      middle: 0.225, // halfway through the 1.2 s pull
-      top: 0.425, // centre of the 0.4 s squeeze
-    },
-    availableViews: ["front", "side", "three_quarter"],
-    defaultView: "side",
-    props: ["dumbbells"],
-    coachPrompt: "What should I watch for in a bent-over row?",
-    summary:
-      "A two-arm dumbbell row from a 45° hip hinge with soft knees: 1.2 s pull to the waist, short squeeze, slower 1.8 s lowering. Palms face each other.",
-    reviewedCues: [
-      "Hinge forward at the hips with soft knees and a flat back, dumbbells hanging under your shoulders.",
-      "Pull the dumbbells towards your waist, leading with your elbows.",
-      "Keep your elbows close to your body and squeeze your shoulder blades together at the top.",
-      "Keep your torso still; don't jerk up to move the weight.",
-      "Lower the dumbbells under control until your arms are straight.",
-      "Choose a weight you can row smoothly for every repetition.",
-    ],
-    limitations: [
-      "Generic demonstration body; it does not represent your body proportions.",
-      "The torso angle shown is one demo position; hinge only as far as you can keep your back flat.",
       "Educational visual only; not medical or injury-prevention advice. Stop if anything hurts.",
     ],
     review: {

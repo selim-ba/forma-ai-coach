@@ -11,8 +11,8 @@ import type { ExerciseId } from "@/types/scene";
 /** Grouped by equipment, lower body before upper body inside each group. */
 const GROUPS: { name: string; ids: ExerciseId[] }[] = [
   { name: "Bodyweight", ids: ["squat", "split_squat"] },
-  { name: "Dumbbells", ids: ["romanian_deadlift", "bent_over_row", "biceps_curl", "shoulder_press", "lateral_raise"] },
-  { name: "Kettlebell", ids: ["goblet_squat", "kettlebell_swing"] },
+  { name: "Dumbbells", ids: ["romanian_deadlift", "biceps_curl", "shoulder_press", "lateral_raise"] },
+  { name: "Kettlebell", ids: ["kettlebell_swing"] },
 ];
 
 /** The card name: the group heading already says the equipment. */
@@ -86,7 +86,7 @@ export function ExercisePicker() {
             className="picker-sheet relative flex max-h-[88dvh] flex-col overflow-hidden rounded-b-3xl border-b border-white/10 bg-surface-raised shadow-2xl"
           >
             <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
-              <h2 className="text-base font-bold">Choose an exercise</h2>
+              <h2 className="font-display text-xl font-extrabold tracking-tight">Choose an exercise</h2>
               <button
                 type="button"
                 onClick={close}
@@ -99,7 +99,7 @@ export function ExercisePicker() {
             <div className="no-scrollbar flex flex-col gap-4 overflow-y-auto px-4 pb-5 pt-1">
               {GROUPS.map((g) => (
                 <section key={g.name} className="flex flex-col gap-2">
-                  <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-muted">{g.name}</h3>
+                  <h3 className="text-sm font-semibold text-ink-muted">{g.name}</h3>
                   <div className="grid grid-cols-2 gap-2">
                     {g.ids.map((id) => (
                       <ExerciseCard

@@ -1,7 +1,7 @@
 """Steps 1 and 3: bake an MHR body into a rigged, animated GLB for the Forma viewer.
 
-Clips: squat, biceps_curl, shoulder_press, romanian_deadlift, split_squat, goblet_squat,
-kettlebell_swing, bent_over_row, lateral_raise.
+Clips: squat, biceps_curl, shoulder_press, romanian_deadlift, split_squat, kettlebell_swing,
+lateral_raise.
 
     python build_avatar.py                                   # generic MHR body
     python build_avatar.py --identity private/me/identity.json --name me
@@ -55,15 +55,11 @@ TIMELINES = {
                           "markers": {"start": 0, "middle": 1.05 / 4, "bottom": 2.0 / 4}},
     "split_squat": {"keys": [(0, 0), (0.3, 0), (1.8, 1), (2.2, 1), (3.7, 0), (4, 0)],
                     "markers": {"start": 0, "middle": 1.05 / 4, "bottom": 2.0 / 4}},
-    "goblet_squat": {"keys": [(0, 0), (0.3, 0), (1.8, 1), (2.2, 1), (3.7, 0), (4, 0)],
-                     "markers": {"start": 0, "middle": 1.05 / 4, "bottom": 2.0 / 4}},
     # Two curves: hinge depth (keys) and the arms' angle from vertical (arm_keys, x 90°).
     # Stand, hike back between the legs, snap up to chest height, swing back, stand up.
     "kettlebell_swing": {"keys": [(0, 0), (0.3, 0), (1.2, 1), (2.2, 0), (3.2, 1), (4, 0)],
                          "arm_keys": [(0, 0.25), (0.3, 0.25), (1.2, -0.12), (2.2, 1.0), (3.2, -0.12), (4, 0.25)],
                          "markers": {"start": 0, "bottom": 1.2 / 4, "top": 2.2 / 4}},
-    "bent_over_row": {"keys": [(0, 0), (0.3, 0), (1.5, 1), (1.9, 1), (3.7, 0), (4, 0)],
-                      "markers": {"start": 0, "middle": 0.9 / 4, "top": 1.7 / 4}},
     "lateral_raise": {"keys": [(0, 0), (0.3, 0), (1.5, 1), (1.9, 1), (3.7, 0), (4, 0)],
                       "markers": {"start": 0, "middle": 0.9 / 4, "top": 1.7 / 4}},
 }
@@ -158,15 +154,6 @@ def split_pose(s: float, twist: float) -> dict:
     return d
 
 
-def goblet_pose(s: float, twist: float) -> dict:
-    """Goblet squat: the squat's legs and torso; the arms hold a kettlebell at the chest (solved)."""
-    d = squat_pose(s, twist)
-    both(d, "uparm_ry", ARM_DOWN_RY + 0.25)   # seeds for the arm solve
-    both(d, "uparm_rz", 0.7)
-    both(d, "elbow_bend", 1.9)
-    return d
-
-
 def swing_pose(h: float, twist: float) -> dict:
     """Kettlebell swing body; h = hinge depth 0 (standing tall) .. 1 (back-swing). Arms are solved."""
     pitch = D(50) * h
@@ -177,23 +164,6 @@ def swing_pose(h: float, twist: float) -> dict:
     both(d, "uparm_ry", ARM_DOWN_RY + 0.1)
     both(d, "uparm_rz", 0.1)
     both(d, "elbow_bend", ELBOW_REST)
-    both(d, "lowarm_twist", twist)
-    return d
-
-
-ROW_PITCH = 45  # degrees of hinge held for the whole bent-over row
-
-
-def row_pose(p: float, twist: float) -> dict:
-    """Bent-over row: a fixed 45° hinge with soft knees; p = 0 arms hanging .. 1 pulled. Arms are solved."""
-    pitch = D(ROW_PITCH)
-    d = {"root_rx": pitch, "spine_bend0": D(-2), "neck_bend": D(-14), "head_bend": D(-4)}
-    both(d, "upleg_rz", -(pitch + D(10)))
-    both(d, "knee_bend", D(20))
-    both(d, "foot_bend", -D(10))
-    both(d, "uparm_ry", ARM_DOWN_RY + 0.1)
-    both(d, "uparm_rz", 0.3 + 0.4 * p)
-    both(d, "elbow_bend", ELBOW_REST + 1.4 * p)
     both(d, "lowarm_twist", twist)
     return d
 
@@ -210,8 +180,8 @@ def raise_pose(p: float, twist: float) -> dict:
 
 
 POSES = {"squat": squat_pose, "biceps_curl": curl_pose, "shoulder_press": press_pose,
-         "romanian_deadlift": rdl_pose, "split_squat": split_pose, "goblet_squat": goblet_pose,
-         "kettlebell_swing": swing_pose, "bent_over_row": row_pose, "lateral_raise": raise_pose}
+         "romanian_deadlift": rdl_pose, "split_squat": split_pose,
+         "kettlebell_swing": swing_pose, "lateral_raise": raise_pose}
 
 
 def cylinder(center: np.ndarray, axis: np.ndarray, radius: float, length: float, segments: int = 20):
@@ -851,56 +821,6 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     def fixed_twists(ut: float, lt: float) -> dict:
         return {"l_uparm_twist": ut, "r_uparm_twist": ut, "l_lowarm_twist": lt, "r_lowarm_twist": lt}
 
-    # ---------------------------------------------------------------- goblet squat
-    # Hands together in front of the upper chest holding the kettlebell's horns, elbows down
-    # and a little outside the wrists. Targets follow the torso as it leans in the squat.
-    def goblet_goals(_s: float):
-        def residual(st, side):
-            sh, el, wr = arm_points(st, side)
-            _hips, up, left, fwd = torso_frame(st)
-            sg = SIGN[side]
-            chest = st[idx["c_spine3"], :3]
-            target = chest + fwd * 0.21 + up * 0.07 + left * (sg * 0.055)
-            return np.array([*(wr - target), sg * np.dot(el - wr, left) - 0.04])
-        return ["uparm_ry", "uparm_rz", "elbow_bend", "uparm_twist"], residual
-
-    u_gb, r_gb = goblet_goals(0.0)
-    goblet_start = solve_arms(goblet_pose(0.0, 0.0), u_gb, r_gb, iterations=40, limits=PRESS_LIMITS)
-    goblet_err = solve_arms.last_error
-    gb_scores = [inwardness(evaluate({**goblet_start, "l_lowarm_twist": t, "r_lowarm_twist": t})[1]) for t in twists]
-    goblet_twist = float(twists[int(np.argmax(gb_scores))])
-    goblet_start = {**goblet_start, "l_lowarm_twist": goblet_twist, "r_lowarm_twist": goblet_twist}
-    print(f"  goblet: hold solve error {goblet_err:.4f}, palms facing in {max(gb_scores):.2f}, forearm twist {goblet_twist:.2f}")
-
-    # ---------------------------------------------------------------- bent-over row
-    # Start: arms hanging under the shoulders (clear of the legs), palms facing in. Top: wrists
-    # at the sides of the waist, elbows driven back close to the body.
-    def row_goals(p: float):
-        def residual(st, side):
-            sh, el, wr = arm_points(st, side)
-            hips, up, left, fwd = torso_frame(st)
-            sg = SIGN[side]
-            hang = sh + np.array([-sg * 0.05, -0.97 * arm_len, 0.02])
-            hang[2] = max(hang[2], leg_front_z(st, side, hang[1]) + DUMBBELL_CLEARANCE)
-            pulled = hips + up * 0.24 + left * (sg * 0.23) - fwd * 0.02
-            target = hang + (pulled - hang) * p
-            return np.array([*(wr - target), sg * np.dot(el - sh, left) - 0.04])
-        return ["uparm_ry", "uparm_rz", "elbow_bend", "uparm_twist"], residual
-
-    u_rw, r_rw = row_goals(0.0)
-    row_start = solve_arms(row_pose(0.0, 0.0), u_rw, r_rw, iterations=40, limits=PRESS_LIMITS)
-    row_err = solve_arms.last_error
-    rw_scores = [inwardness(evaluate({**row_start, "l_lowarm_twist": t, "r_lowarm_twist": t})[1]) for t in twists]
-    row_twist = float(twists[int(np.argmax(rw_scores))])
-    row_start = {**row_start, "l_lowarm_twist": row_twist, "r_lowarm_twist": row_twist}
-    walk = dict(row_start)
-    for p_ in np.linspace(0.1, 1.0, 10):
-        u_, r_ = row_goals(float(p_))
-        walk = solve_arms({**walk, **{k: v for k, v in row_pose(float(p_), row_twist).items() if "uparm" not in k
-                                      and "elbow" not in k}}, u_, r_, iterations=25, limits=PRESS_LIMITS)
-    print(f"  row: start solve error {row_err:.4f}, top solve error {solve_arms.last_error:.4f}, "
-          f"palms facing in {max(rw_scores):.2f}, forearm twist {row_twist:.2f}")
-
     # ---------------------------------------------------------------- lateral raise
     # The arm direction sweeps from 12° to 82° away from vertical, in the scapular plane
     # (25° forward of straight out to the side), elbows softly bent, palms facing in → down.
@@ -996,14 +916,16 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
                 print(f"      {nm} = {swing_start.get(nm, 0.0):.3f}  limits {SWING_LIMITS.get(u, tuple(np.round(m.pose_limits[m.index(nm)], 3)))}")
         raise SystemExit("FORMA_DIAG: stopped after the swing set-up (nothing written).")
 
-    TWISTS = {"squat": twist, "biceps_curl": twist, "shoulder_press": press_twist,
-              "romanian_deadlift": rdl_twist, "split_squat": 0.0, "goblet_squat": goblet_twist,
-              "kettlebell_swing": rdl_twist, "bent_over_row": row_twist, "lateral_raise": lr_best[2]}
-    SEEDS = {"shoulder_press": press_start, "romanian_deadlift": rdl_start, "goblet_squat": goblet_start,
-             "bent_over_row": row_start, "lateral_raise": raise_start, "kettlebell_swing": swing_start}
-    FIXED = {"romanian_deadlift": rdl_fixed, "kettlebell_swing": rdl_fixed, "lateral_raise": raise_fixed}
-    LIMITS = {"shoulder_press": PRESS_LIMITS, "goblet_squat": PRESS_LIMITS, "bent_over_row": PRESS_LIMITS,
-              "lateral_raise": PRESS_LIMITS, "kettlebell_swing": SWING_LIMITS}
+    # Squats start with relaxed arms, palms facing the thighs (the lateral raise's start grip),
+    # rather than the curl's palms-forward grip, which reads as a mannequin's A-pose.
+    TWISTS = {"squat": lr_best[2], "biceps_curl": twist, "shoulder_press": press_twist,
+              "romanian_deadlift": rdl_twist, "split_squat": lr_best[2],
+              "kettlebell_swing": rdl_twist, "lateral_raise": lr_best[2]}
+    SEEDS = {"shoulder_press": press_start, "romanian_deadlift": rdl_start,
+             "lateral_raise": raise_start, "kettlebell_swing": swing_start}
+    FIXED = {"romanian_deadlift": rdl_fixed, "kettlebell_swing": rdl_fixed, "lateral_raise": raise_fixed,
+             "squat": raise_fixed, "split_squat": raise_fixed}
+    LIMITS = {"shoulder_press": PRESS_LIMITS, "lateral_raise": PRESS_LIMITS, "kettlebell_swing": SWING_LIMITS}
     STANCE_WIDEN = {"kettlebell_swing": 0.07}  # metres per foot: a little wider than hip-width
 
     def goals_for(clip: str, amount: float, t: float):
@@ -1015,10 +937,6 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
             return rdl_goals(amount)
         if clip == "split_squat":
             return squat_goals(0.0, hang_offset)  # arms hang by the sides
-        if clip == "goblet_squat":
-            return goblet_goals(amount)
-        if clip == "bent_over_row":
-            return row_goals(amount)
         if clip == "lateral_raise":
             return raise_goals(amount)
         if clip == "kettlebell_swing":
@@ -1219,7 +1137,7 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     scene_nodes = roots + [len(g.doc["nodes"]) - 1]
 
     # Props, rigidly attached to the wrist joints. The app shows each prop mesh ("Dumbbells",
-    # "KettlebellGoblet", "KettlebellSwing") only for the exercises that use it.
+    # "KettlebellSwing") only for the exercises that use it.
     g.doc["materials"].append({"name": "Prop", "pbrMetallicRoughness": {
         "baseColorFactor": [0.10, 0.11, 0.12, 1], "metallicFactor": 0.6, "roughnessFactor": 0.35},
         "doubleSided": True})
@@ -1290,9 +1208,7 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
         g.doc["nodes"].append({"name": name, "mesh": mesh_index, "skin": 0})
         scene_nodes.append(len(g.doc["nodes"]) - 1)
 
-    # Goblet: the bell hangs below the hands along the torso; swing: along the arms.
-    gs = hold_states["goblet_squat"]
-    add_kettlebell("KettlebellGoblet", gs, -torso_frame(gs)[1])
+    # Swing: the bell hangs below the hands along the arms.
     ss = hold_states["kettlebell_swing"]
     arm_dir = palm_mid(ss) - (ss[idx["l_uparm"], :3] + ss[idx["r_uparm"], :3]) / 2
     add_kettlebell("KettlebellSwing", ss, arm_dir)

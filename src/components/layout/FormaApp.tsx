@@ -1,8 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { BodySwitch } from "@/components/avatar/BodySwitch";
-import { MyAvatarButton } from "@/components/avatar/MyAvatarButton";
+import { AvatarMenu } from "@/components/avatar/AvatarMenu";
+import { SHOW_WELCOME_EVENT, Welcome } from "@/components/layout/Welcome";
 import { CoachChat } from "@/components/coach/CoachChat";
 import { ExercisePicker } from "@/components/controls/ExercisePicker";
 import { PlaybackControls } from "@/components/controls/PlaybackControls";
@@ -42,9 +42,15 @@ export function FormaApp() {
       data-avatar={avatarStatus}
     >
       <header className="app-header flex items-center gap-3 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <span className="shrink-0 text-lg font-black tracking-tight">
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event(SHOW_WELCOME_EVENT))}
+          className="shrink-0 rounded-lg font-display text-[1.35rem] font-extrabold leading-none tracking-[-0.01em] [font-stretch:85%]"
+          aria-label="Forma, about this app"
+          data-testid="logo"
+        >
           forma<span className="text-accent">.</span>
-        </span>
+        </button>
         <div className="ml-auto flex min-w-0 justify-end">
           <ExercisePicker />
         </div>
@@ -55,12 +61,11 @@ export function FormaApp() {
         <AvatarCanvas />
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3">
           <div className="flex flex-col items-start gap-1.5">
-            <div className="pointer-events-auto flex flex-col items-start gap-1.5">
-              <MyAvatarButton />
-              <BodySwitch />
+            <div className="pointer-events-auto">
+              <AvatarMenu />
             </div>
             {scene.phase && !scene.playing && (
-              <span className="rounded-full bg-accent px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-surface" data-testid="phase-badge">
+              <span className="rounded-full bg-accent px-2.5 py-1 text-[11px] font-bold text-surface" data-testid="phase-badge">
                 {PHASE_LABEL[scene.phase]}
               </span>
             )}
@@ -91,6 +96,7 @@ export function FormaApp() {
         </div>
         <CoachChat />
       </div>
+      <Welcome />
     </div>
   );
 }

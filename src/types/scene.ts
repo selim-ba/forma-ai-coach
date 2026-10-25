@@ -10,9 +10,7 @@ export const EXERCISE_IDS = [
   "shoulder_press",
   "romanian_deadlift",
   "split_squat",
-  "goblet_squat",
   "kettlebell_swing",
-  "bent_over_row",
   "lateral_raise",
 ] as const;
 export type ExerciseId = (typeof EXERCISE_IDS)[number];

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { EXERCISE_IDS, PHASES, VIEWS } from "@/types/scene";
 
 /** Prop meshes baked into the avatar GLBs (see build_avatar.py). */
-export const PROPS = ["dumbbells", "kettlebell_goblet", "kettlebell_swing"] as const;
+export const PROPS = ["dumbbells", "kettlebell_swing"] as const;
 export type Prop = (typeof PROPS)[number];
 
 const normalized = z.number().min(0).max(1);

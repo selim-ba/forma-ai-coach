@@ -100,7 +100,7 @@ export function PlaybackControls() {
               disabled={!enabled}
               onClick={() => seekPhase(phase)}
               data-testid={`phase-${phase}`}
-              className={`min-h-11 rounded-xl text-xs font-semibold uppercase tracking-wider ${
+              className={`min-h-11 rounded-xl text-sm font-semibold ${
                 scene.phase === phase
                   ? "bg-accent/20 text-accent"
                   : enabled

@@ -12,9 +12,17 @@ import type { ExerciseId, SceneState } from "@/types/scene";
 /** Prop → mesh name in the avatar GLBs (research/avatar-pipeline/build_avatar.py). */
 const PROP_MESHES: Record<Prop, string> = {
   dumbbells: "Dumbbells",
-  kettlebell_goblet: "KettlebellGoblet",
   kettlebell_swing: "KettlebellSwing",
 };
+
+/** Show only the props the exercise uses. Prop meshes this app version doesn't know (e.g. the
+ * goblet kettlebell in avatars built before that exercise was dropped) always stay hidden. */
+function showProps(model: THREE.Object3D, props: readonly Prop[]) {
+  const wanted = new Set(props.map((p) => PROP_MESHES[p]));
+  model.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh && /^(Dumbbells|Kettlebell)/.test(obj.name)) obj.visible = wanted.has(obj.name);
+  });
+}
 
 type Actions = Record<string, THREE.AnimationAction | null>;
 type Applied = { exerciseId: ExerciseId | null; seekNonce: number };
@@ -32,10 +40,7 @@ function syncMixer(actions: Actions, mixer: THREE.AnimationMixer, model: THREE.O
   if (!action) {
     // This avatar has no clip for the exercise (the viewer shows a message): stop the old one.
     for (const other of Object.values(actions)) other?.stop();
-    for (const meshName of Object.values(PROP_MESHES)) {
-      const mesh = model.getObjectByName(meshName);
-      if (mesh) mesh.visible = false;
-    }
+    showProps(model, []);
     applied.exerciseId = null;
     return;
   }
@@ -54,10 +59,7 @@ function syncMixer(actions: Actions, mixer: THREE.AnimationMixer, model: THREE.O
     action.clampWhenFinished = false;
     action.play();
     applied.exerciseId = state.exerciseId;
-    for (const [prop, meshName] of Object.entries(PROP_MESHES) as [Prop, string][]) {
-      const mesh = model.getObjectByName(meshName);
-      if (mesh) mesh.visible = exercise.props.includes(prop);
-    }
+    showProps(model, exercise.props);
   }
 
   action.timeScale = state.speed;
@@ -99,6 +101,7 @@ export function AvatarModel({ url }: { url: string }) {
   // One-time mesh setup, and expose the rig to overlays.
   useLayoutEffect(() => {
     disableFrustumCulling(model);
+    showProps(model, []); // props stay hidden until an exercise that uses them is applied
     avatarRig.current = model;
     return () => {
       if (avatarRig.current === model) avatarRig.current = null;
@@ -129,7 +132,12 @@ export function AvatarModel({ url }: { url: string }) {
   }, [actions, mixer, model]);
 
   useFrame(() => {
+    // drei creates actions lazily: on the very first render the clip may not exist yet, so
+    // keep trying until the current exercise is applied (otherwise the bind pose shows).
     const action = actions[EXERCISES[scene.exerciseId].clipName];
+    if (applied.current.exerciseId !== scene.exerciseId || (action && !action.isScheduled())) {
+      syncMixer(actions, mixer, model, { exerciseId, speed, seek, playing }, applied.current);
+    }
     if (!action) return;
     const duration = action.getClip().duration;
     playhead.duration = duration;

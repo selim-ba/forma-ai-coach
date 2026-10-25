@@ -179,7 +179,7 @@ export function CoachChat() {
                 aria-selected={tab === t}
                 onClick={() => setTab(t)}
                 data-testid={`tab-${t}`}
-                className={`min-h-9 rounded-full px-3 text-xs font-semibold uppercase tracking-wider ${
+                className={`min-h-9 rounded-full px-3 text-xs font-semibold ${
                   tab === t ? "bg-white/12 text-ink" : "text-ink-muted"
                 }`}
               >

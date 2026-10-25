@@ -8,6 +8,7 @@
   --color-accent: #ff7a45;
   --font-sans: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
 }
 
 html,
@@ -56,9 +57,11 @@ body {
   }
 }
 
+/* Studio backdrop: a soft glow behind the avatar falling off into the app's surface. */
 .viewer-bg {
   background:
-    radial-gradient(120% 70% at 50% 35%, #262a31 0%, #15181c 55%, #0e1013 100%);
+    radial-gradient(55% 42% at 50% 42%, rgb(70 78 92 / 0.35) 0%, transparent 70%),
+    radial-gradient(120% 75% at 50% 38%, #23272e 0%, #14171b 58%, #0e1013 100%);
 }
 
 @layer components {
@@ -88,4 +91,18 @@ button:disabled { cursor: default; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* Welcome screen: the 3D demo stays visible at the top, the words sit on a scrim. */
+.welcome-scrim {
+  background:
+    linear-gradient(to bottom, rgb(14 16 19 / 0.7) 0%, rgb(14 16 19 / 0) 22%),
+    linear-gradient(to bottom, rgb(14 16 19 / 0) 40%, rgb(14 16 19 / 0.9) 56%, #0e1013 66%);
+}
+.welcome > .relative { animation: welcome-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.welcome { animation: picker-fade 0.35s ease-out both; }
+.welcome-out { opacity: 0; transition: opacity 0.25s ease-in; }
+@keyframes welcome-in { from { transform: translateY(18px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .welcome, .welcome > .relative, .picker-sheet, .picker-backdrop { animation: none; }
 }

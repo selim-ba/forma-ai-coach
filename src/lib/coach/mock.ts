@@ -4,15 +4,13 @@ import { MAX_CUES } from "@/types/cues";
 import type { ExerciseId, SceneSnapshot } from "@/types/scene";
 
 const OFFER =
-  "I can show a squat, a goblet squat, a split squat, a Romanian deadlift, a kettlebell swing, a bent-over row, a biceps curl, a shoulder press or a lateral raise.";
+  "I can show a squat, a split squat, a Romanian deadlift, a kettlebell swing, a biceps curl, a shoulder press or a lateral raise.";
 
 /** Which supported exercise the message names, if any (most specific first). */
 function namedExercise(has: (...words: (string | RegExp)[]) => boolean): ExerciseId | null {
   if (has(/\b(split.?squats?|lunges?)\b/)) return "split_squat";
-  if (has(/\bgoblet\b/, /\bkettlebell squats?\b/)) return "goblet_squat";
   if (has(/\bswings?\b/, /\bkettlebells?\b/)) return "kettlebell_swing";
   if (has(/\b(romanian|rdl|deadlifts?|hip hinge)\b/)) return "romanian_deadlift";
-  if (has(/\brows?\b/, /\browing\b/)) return "bent_over_row";
   if (has(/\b(lateral|side)\s+raises?\b/, /\braises?\b/)) return "lateral_raise";
   if (has(/\b(shoulder|overhead|military)\s+press/, /\bpress(es)?\b/)) return "shoulder_press";
   if (has("squat")) return "squat";
@@ -44,7 +42,7 @@ export function mockCoach(message: string, scene: SceneSnapshot): { message: str
       commands: [],
     };
   }
-  if (has(/\b(bench|leg press|chest press|push.?ups?|pull.?ups?|chin.?ups?|planks?|upright rows?|burpees?|jumps?|jumping|dips?)\b/)) {
+  if (has(/\b(bench|leg press|chest press|push.?ups?|pull.?ups?|chin.?ups?|planks?|rows?|rowing|goblet|burpees?|jumps?|jumping|dips?)\b/)) {
     return { message: `That exercise isn't available yet. ${OFFER}`, commands: [] };
   }
 
