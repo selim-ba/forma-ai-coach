@@ -30,7 +30,7 @@ from glb_writer import ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER, GLB
 from hair import add_hair, head_weight, srgb_to_linear
 import texture
 from appearance import mirror_map
-from clothes import dress, garment_texture
+from clothes import dress, extents_from_photo, garment_texture
 from mhr_common import HERE, MHRModel
 
 REPO = HERE.parent.parent
@@ -391,10 +391,23 @@ def build(identity_path: Path | None, out_path: Path, use_texture: bool = True, 
     # Clothes (generic body): reshape the rest mesh into a T-shirt and shorts that drape like
     # fabric, before anything measures the body, so clearances account for the garments.
     garment_fields, clothes_info = None, None
+    joints_rest = {n: s0[i, :3] for i, n in enumerate(m.joint_names)}
     if not personal:
-        joints_rest = {n: s0[i, :3] for i, n in enumerate(m.joint_names)}
         v0, _garment_label, clothes_info, garment_fields = dress(v0, m.faces.astype(np.int64), joints_rest)
         print(f"  clothes: {clothes_info}")
+    elif (identity_path.parent / "appearance.npz").is_file():
+        # Photo avatars: the garments' shape follows what the person wore (sleeve and leg
+        # lengths read from the photo colours); the photo texture still paints them.
+        z = np.load(identity_path.parent / "appearance.npz")
+        if len(z["colors"]) == len(v0):
+            ext, ext_info = extents_from_photo(v0, joints_rest, z["colors"].astype(np.float64) / 255.0, z["visible"])
+            if ext:
+                v0, _garment_label, clothes_info, _fields = dress(v0, m.faces.astype(np.int64), joints_rest,
+                                                                   {**ext, "hem_ease": 0.004})
+                clothes_info = {**clothes_info, "fromPhoto": ext_info}
+                print(f"  clothes from the photos: {clothes_info}")
+            else:
+                print(f"  clothes: not enough of the body seen to shape garments ({ext_info})")
 
     # Solve forearm twist so the palms face forward at the curl's start (supinated grip).
     fingers = {side: [idx[f"{side}_wrist"], idx[f"{side}_middle1"], idx[f"{side}_index1"], idx[f"{side}_pinky1"]]

@@ -22,8 +22,13 @@ NONE, SHIRT, SHORTS = 0, 1, 2
 SHIRT_SRGB = np.array([0.22, 0.24, 0.29])   # charcoal-navy T-shirt
 SHORTS_SRGB = np.array([0.47, 0.48, 0.51])  # mid-grey shorts
 
-# Garment extents for the generic body (fractions along the limb, metres below the root joint).
-GENERIC = {"sleeve_t": 0.42, "shirt_hem_below_root": 0.06, "shorts_t": 0.48}
+# Garment extents. sleeve_t / shorts_t run along the whole limb: 0..1 is the upper arm or thigh,
+# 1..2 the forearm or shin (so 1.9 is a long sleeve or long trousers). hem_ease: extra width at
+# the shirt hem (a flare reads well on the generic body; photo avatars keep it small because the
+# real hem may be tucked in or elsewhere).
+GENERIC = {"sleeve_t": 0.42, "shirt_hem_below_root": 0.06, "shorts_t": 0.48, "hem_ease": 0.012}
+ARM = (("uparm", "uparm", "lowarm"), ("forearm", "lowarm", "wrist"))
+LEG = (("thigh", "upleg", "lowleg"), ("shin", "lowleg", "talocrural"))
 
 
 def _segment(p: np.ndarray, a: np.ndarray, b: np.ndarray):
@@ -105,8 +110,9 @@ def _limb_frame(axis: np.ndarray):
     return axis, u, np.cross(axis, u)
 
 
-def _drape_limb(v, sel, a, b, ease0, ease1, t_hem, out):
-    """Widen a limb garment (sleeve or shorts leg) slice by slice along a→b."""
+def _drape_limb(v, sel, a, b, ease0, ease1, t_hem, out, t_offset: float = 0.0):
+    """Widen a limb garment (sleeve or trouser leg) slice by slice along a→b; t_offset is this
+    segment's start along the whole limb (0 upper segment, 1 lower)."""
     axis, u, w = _limb_frame(b - a)
     length = float(np.linalg.norm(b - a))
     rel = v[sel] - a
@@ -122,7 +128,7 @@ def _drape_limb(v, sel, a, b, ease0, ease1, t_hem, out):
         ang = np.arctan2(p2[k, 1] - c[1], p2[k, 0] - c[0])
         r = np.linalg.norm(p2[k] - c, axis=1)
         rh = _hull_radius(_hull(p2[k]), c, ang)
-        frac = np.clip(t[k] / max(t_hem, 1e-6), 0, 1)
+        frac = np.clip((t_offset + t[k]) / max(t_hem, 1e-6), 0, 1)
         ease = ease0 + (ease1 - ease0) * frac ** 2
         r_new = np.maximum(r, rh) + ease
         q2 = c + (p2[k] - c) * (r_new / np.maximum(r, 1e-6))[:, None]
@@ -162,13 +168,16 @@ def dress(v: np.ndarray, faces: np.ndarray, joints: dict, extents: dict | None =
     d_shirt[trunk] = np.minimum(y - hem_y, collar)[trunk]
     d_shorts[is_torso] = (hem_y + 0.12 - y)[is_torso]
     for s in ("l", "r"):
-        up = part == f"{s}_uparm"
-        L = float(np.linalg.norm(joints[f"{s}_lowarm"] - joints[f"{s}_uparm"]))
-        d_shirt[up] = ((ext["sleeve_t"] - ts[f"{s}_uparm"]) * L)[up]
+        for k, (cls, a, b) in enumerate(ARM):
+            sel = part == f"{s}_{cls}"
+            L = float(np.linalg.norm(joints[f"{s}_{b}"] - joints[f"{s}_{a}"]))
+            d_shirt[sel] = ((ext["sleeve_t"] - k - ts[f"{s}_{cls}"]) * L)[sel]
+        for k, (cls, a, b) in enumerate(LEG):
+            sel = part == f"{s}_{cls}"
+            L = float(np.linalg.norm(joints[f"{s}_{b}"] - joints[f"{s}_{a}"]))
+            d_shorts[sel] = ((ext["shorts_t"] - k - ts[f"{s}_{cls}"]) * L)[sel]
         th = part == f"{s}_thigh"
-        L = float(np.linalg.norm(joints[f"{s}_lowleg"] - joints[f"{s}_upleg"]))
         d_shirt[th] = (y - hem_y)[th]
-        d_shorts[th] = ((ext["shorts_t"] - ts[f"{s}_thigh"]) * L)[th]
     label = np.zeros(len(v), np.int8)
     label[d_shorts > 0] = SHORTS
     label[d_shirt > 0] = SHIRT
@@ -201,7 +210,7 @@ def dress(v: np.ndarray, faces: np.ndarray, joints: dict, extents: dict | None =
         r = np.linalg.norm(p2, axis=1)
         bin_ = np.clip(((ang + np.pi) / (2 * np.pi) * n_ang).astype(int), 0, n_ang - 1)
         hem_frac = np.clip(1 - (v[k, 1] - hem_y) / 0.07, 0, 1)
-        ease = 0.007 + 0.012 * hem_frac ** 2
+        ease = 0.007 + ext["hem_ease"] * hem_frac ** 2
         r_new = np.maximum(r, hr[bin_]) + ease
         scale = r_new / np.maximum(r, 1e-6)
         idx = np.flatnonzero(k)
@@ -210,10 +219,12 @@ def dress(v: np.ndarray, faces: np.ndarray, joints: dict, extents: dict | None =
 
     # --- sleeves and shorts legs -----------------------------------------------------------
     for s in ("l", "r"):
-        sleeve = (label == SHIRT) & (part == f"{s}_uparm")
-        _drape_limb(v, sleeve, joints[f"{s}_uparm"], joints[f"{s}_lowarm"], 0.007, 0.016, ext["sleeve_t"], out)
-        leg = (label == SHORTS) & (part == f"{s}_thigh")
-        _drape_limb(v, leg, joints[f"{s}_upleg"], joints[f"{s}_lowleg"], 0.010, 0.026, ext["shorts_t"], out)
+        for k, (cls, a, b) in enumerate(ARM):
+            sel = (label == SHIRT) & (part == f"{s}_{cls}")
+            _drape_limb(v, sel, joints[f"{s}_{a}"], joints[f"{s}_{b}"], 0.007, 0.016, ext["sleeve_t"], out, k)
+        for k, (cls, a, b) in enumerate(LEG):
+            sel = (label == SHORTS) & (part == f"{s}_{cls}")
+            _drape_limb(v, sel, joints[f"{s}_{a}"], joints[f"{s}_{b}"], 0.010, 0.026, ext["shorts_t"], out, k)
     seat = (label == SHORTS) & is_torso   # pelvis under the shorts: a little ease along the normal
     if seat.any():
         c = np.array([0.0, float(np.median(v[seat, 1])), cz])
@@ -284,3 +295,61 @@ def garment_texture(fields: np.ndarray, skin_linear: np.ndarray, size: int = 64)
     buf = io.BytesIO()
     Image.fromarray((img * 255 + 0.5).astype(np.uint8)).save(buf, format="PNG")
     return uv, buf.getvalue()
+
+
+def extents_from_photo(v: np.ndarray, joints: dict, srgb: np.ndarray, seen: np.ndarray):
+    """Where the sleeves and the shorts or trousers end, from the photo colours.
+
+    Skin colour comes from the face. Walking down each arm and leg, the garment ends where
+    the limb turns (and stays) skin-coloured. Both sides are averaged. Returns (extents, info);
+    extents is empty when the photos don't show enough to decide.
+    """
+    part, ts = classify(v, joints)
+    head = joints["c_head"]
+    face = (part == "head") & seen & (v[:, 2] > head[2] + 0.04) & \
+        (v[:, 1] > joints["c_neck"][1] + 0.06) & (v[:, 1] < head[1] + 0.03)
+    if face.sum() < 30:
+        return {}, {"skipped": "face not seen"}
+    skin = np.median(srgb[face], 0)
+
+    def skin_like(c):
+        lum = c.sum(1) + 1e-6
+        chroma = c / lum[:, None] - skin / skin.sum()
+        ratio = lum / skin.sum()
+        return (np.linalg.norm(chroma, axis=1) < 0.04) & (ratio > 0.5) & (ratio < 1.7)
+
+    def garment_end(chain, side):
+        s_all, c_all = [], []
+        for k, (cls, _a, _b) in enumerate(chain):
+            sel = (part == f"{side}_{cls}") & seen
+            s_all.append(k + ts[f"{side}_{cls}"][sel])
+            c_all.append(srgb[sel])
+        s_v, c_v = np.concatenate(s_all), np.concatenate(c_all)
+        if len(s_v) < 40:
+            return None
+        like = skin_like(c_v)
+        edges = np.arange(0.0, 2.0001, 0.1)
+        frac = []
+        for lo, hi in zip(edges[:-1], edges[1:]):
+            k = (s_v >= lo) & (s_v < hi)
+            frac.append(float(like[k].mean()) if k.sum() >= 5 else np.nan)
+        frac = np.array(frac)
+        known = np.flatnonzero(~np.isnan(frac))
+        if len(known) < 8:
+            return None
+        # The garment ends where the first sustained run of skin starts (3 known bins), walking
+        # away from the body; socks or a watch further down don't extend it.
+        is_skin = frac >= 0.55
+        for i, b in enumerate(known):
+            run = known[i:i + 3]
+            if len(run) == 3 and is_skin[run].all():
+                return 0.05 if edges[b] < 0.15 else float(edges[b])
+        return 1.9                                       # no bare skin: long sleeve / trousers
+
+    ext, info = {}, {"skinSRGB": np.round(skin / 255.0 if skin.max() > 1 else skin, 3).tolist()}
+    for key, chain in (("sleeve_t", ARM), ("shorts_t", LEG)):
+        ends = [e for e in (garment_end(chain, side) for side in ("l", "r")) if e is not None]
+        if ends:
+            ext[key] = round(float(np.mean(ends)), 2)
+    info.update(ext)
+    return ext, info
