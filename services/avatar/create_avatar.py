@@ -2,6 +2,7 @@
 
     python services/avatar/create_avatar.py front.jpg side.jpg back.jpg            # expires after 24 h
     python services/avatar/create_avatar.py front.jpg side.jpg back.jpg --keep     # kept: the demo fallback
+    (add --body female for the women's cut and a ponytail)
 
 Reads AVATAR_SERVICE_URL and AVATAR_TOKEN from the environment or from .env.local at the
 repo root. Photos are resized to 2048 px JPEG first, exactly like the app does. Prints the
@@ -70,10 +71,11 @@ def main() -> None:
     ap.add_argument("side", type=Path)
     ap.add_argument("back", type=Path)
     ap.add_argument("--keep", action="store_true", help="never auto-delete (the demo fallback avatar)")
+    ap.add_argument("--body", choices=["male", "female"], default="male", help="hair and clothing cut")
     args = ap.parse_args()
 
     base = env("AVATAR_SERVICE_URL").rstrip("/")
-    body, ctype = multipart({"keep": "true" if args.keep else "false"},
+    body, ctype = multipart({"keep": "true" if args.keep else "false", "body": args.body},
                             {"front": jpeg(args.front), "side": jpeg(args.side), "back": jpeg(args.back)})
     req = urllib.request.Request(f"{base}/avatars", data=body, method="POST",
                                  headers={"Content-Type": ctype, "X-Avatar-Token": env("AVATAR_TOKEN")})
