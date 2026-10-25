@@ -1,334 +1,162 @@
-# Forma — AI 3D Fitness Coach
+# Gym3DBeta
 
-> An iPhone-first, interactive 3D exercise demonstrator powered by GPT-6.1 Sol.
+**3D exercise demos you can steer by talking to an AI coach.**
 
-**Status:** MVP complete: deployed over HTTPS (Vercel), verified on a physical iPhone 13, and the 60-second demo rehearsed twice. See [Implementation status](#implementation-status).  
-**Target device:** iPhone 13 (Safari, Add to Home Screen)  
-**Development device:** MacBook Pro M4 Pro  
-**Budget:** 20 engineering hours  
-**Stack:** Next.js (App Router), TypeScript, React Three Fiber, Three.js, Tailwind CSS, OpenAI Responses API
+> **An experiment, not a product.** Gym3DBeta is a personal side project built to test OpenAI's latest model, **GPT-6.1 Sol**, on a concrete job. The model doesn't only chat: it drives a live 3D scene through strict tool calls (pick an exercise, turn the camera, slow down, stop at the hardest point, show form cues) and explains what you're looking at. The interesting question was how much of an app a model can steer reliably once it is given a small, validated set of actions. Everything here is a work in progress: expect rough edges, and don't take it as fitness or medical advice.
+
+<p align="center">
+  <img src="docs/screenshots/hero.jpg" alt="Three iPhone screens: a squat with form cues, the coach explaining a kettlebell swing, and a Romanian deadlift on the woman body" width="900">
+</p>
+
+<p align="center">
+  <a href="https://forma-ai-coach-nine.vercel.app"><b>Live demo</b></a> ·
+  built for iPhone Safari (works on desktop too) ·
+  <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white">
+  <img alt="three.js" src="https://img.shields.io/badge/three.js-r180-049ef4?logo=threedotjs&logoColor=white">
+  <img alt="OpenAI GPT-6.1 Sol" src="https://img.shields.io/badge/OpenAI-GPT--6.1%20Sol-412991?logo=openai&logoColor=white">
+</p>
+
+---
 
 ## What it does
 
-Forma displays an animated human avatar performing curated exercise demonstrations. The user can ask a conversational coach to select an exercise, pause at a phase, change speed or camera angle, and explain movement cues. GPT-6.1 Sol translates user requests into **validated scene commands**. The app—not the LLM—owns the animation, transforms, and physical constraints.
+- **Seven animated exercises** on a realistic human body: bodyweight squat, split squat, dumbbell Romanian deadlift, biceps curl, shoulder press, lateral raise and kettlebell swing.
+- **Full playback control:** drag to rotate; front, side and ¾ views; play, pause, replay; 0.5× and 1× speed; jump to the start, middle, bottom or top of a rep.
+- **Form cues drawn in 3D:** arrows, lines and labels attached to the body ("hips back", "weights close to the legs") that follow the movement.
+- **A coach you can talk to.** Ask "show me a kettlebell swing from the side and stop where the bell is highest" and GPT-6.1 Sol picks the exercise, moves the camera, seeks the phase, turns on the right cues and answers in one or two sentences. Every action it takes appears in an **Actions** log.
+- **Man and woman bodies,** plus two demo avatars rebuilt from AI-generated photos.
+- **An avatar from your own photos (experimental):** three photos (front, side, back) become a textured, rigged 3D body that performs all seven exercises, in about four minutes. Personal avatars are deleted after 24 hours.
+- **Installs on the iPhone home screen** as a full-screen web app.
 
-**Demo script (60 seconds):**
+## Screenshots
 
-1. Launch Forma from the iPhone Home Screen.
-2. Say or type: “Show me a beginner squat from the side.”
-3. The coach selects `squat`, switches to side view and starts the reference animation.
-4. Say: “Slow it down and pause at the bottom.”
-5. The avatar slows to 0.5× and seeks to the curated `bottom` marker.
-6. Ask: “What should I pay attention to?” The coach gives concise educational cues from the reviewed exercise catalog.
-7. Switch to `biceps_curl`, rotate and replay.
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/welcome.jpg" width="240" alt="Welcome screen"><br><sub>Welcome</sub></td>
+    <td align="center"><img src="docs/screenshots/form-cues.jpg" width="240" alt="Squat at the bottom, side view, with form cues"><br><sub>Form cues at the bottom of a squat</sub></td>
+    <td align="center"><img src="docs/screenshots/coach.jpg" width="240" alt="The coach answering about the kettlebell swing"><br><sub>The coach drives the scene</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/exercises.jpg" width="240" alt="Exercise picker"><br><sub>Exercise picker</sub></td>
+    <td align="center"><img src="docs/screenshots/deadlift-woman.jpg" width="240" alt="Romanian deadlift on the woman body"><br><sub>Romanian deadlift, ¾ view</sub></td>
+    <td align="center"><img src="docs/screenshots/avatar-menu.jpg" width="240" alt="Avatar menu"><br><sub>Bodies and avatars</sub></td>
+  </tr>
+</table>
 
-## MVP scope
+## How the coach works
 
-### Must have
-- [ ] Responsive mobile UI designed and tested at iPhone 13 viewport.
-- [ ] Rigged generic humanoid GLB in a touch-friendly WebGL viewer.
-- [ ] Two **reviewed, pre-authored** motion clips: squat and biceps curl.
-- [ ] Drag-to-orbit and one-tap front/side camera presets.
-- [ ] Play, pause, replay, 0.5× / 1× playback and phase markers.
-- [ ] Server-side GPT-6.1 Sol API route with validated, allowlisted scene actions.
-- [ ] Typed chat panel and visible event/action log for demos.
-- [ ] Graceful fallback when API is unavailable; manual controls remain functional.
-- [ ] Deploy over HTTPS; test on a physical iPhone 13.
-
-### Nice to have (only when must-haves are stable)
-- [ ] Voice input via Web Speech API *when supported* or an explicit record/upload transcription path.
-- [ ] Spoken coaching via browser `speechSynthesis` or server-synthesized speech.
-- [ ] Simple silhouette/body-shape presets (not presented as reconstruction).
-- [ ] PWA manifest and installable Home Screen icon.
-
-### Out of scope for the 20-hour MVP
-- Accurate reconstruction of the user's body; SOMA; inference on the phone; arbitrary text-to-motion; automatic technique grading; injury diagnosis; authentication and social features; user photo storage.
-
-## Architecture
+The model interprets what you want; the app decides what is allowed and does it. GPT-6.1 Sol never touches the animation directly.
 
 ```text
-iPhone 13 Safari
-  ├── Responsive Next.js frontend
-  ├── React Three Fiber scene ── GLB skinned avatar + curated AnimationClips
-  ├── Scene state machine ── validate & execute app commands
-  └── Chat UI ── POST /api/coach
-                       │
-                       ▼
-                 Next.js route handler (server-side)
-                 ├── GPT-6.1 Sol Responses API
-                 ├── Tool / JSON schema validation (Zod)
-                 ├── Exercise catalog and coaching instructions
-                 └── bounded scene-command response
-                       │
-                       ▼
-                 Browser executes allowlisted scene commands
-
-Later, independent branch:
-iPhone photos ──> SAM 3D Body GPU inference ──> MHR identity/rig ──> export/retarget ──> skinned GLB
+ You ─▶ "Slow it down and pause at the bottom"
+         │
+         ▼
+ POST /api/coach  (Next.js route, server only)
+   ├─ system prompt + exercise catalog + current scene state
+   ├─ OpenAI Responses API, one strict tool: control_scene(commands[])
+   └─ Zod validation: unknown exercises, phases or cues are rejected
+         │
+         ▼
+ { message: "Here's the bottom, at half speed…",
+   commands: [ set_speed 0.5, seek_phase bottom, pause, show_cues [...] ] }
+         │
+         ▼
+ Browser: validates again in the scene reducer, then plays it in three.js
 ```
 
-**Important:** `SAM 3D Body` is **not** a runtime requirement for the MVP. Only introduce it after generic avatar playback and GPT orchestration are tested. This avoids making the demo dependent on a CUDA-oriented research environment.
+The command set is deliberately small: `select_exercise`, `play`, `pause`, `set_speed`, `set_view`, `seek_phase`, `reset`, `show_cues` and `clear_cues`. Coaching text comes from a hand-written catalog of cues for each exercise, so the model explains the cues the app can draw instead of inventing thresholds. When you ask for an exercise that isn't in the catalog, the coach says so and offers a supported one.
 
-## Repository structure
+What the experiment showed so far:
 
-```text
-forma/
-├── README.md
-├── IMPLEMENTATION_PLAN.md
-├── .env.example
-├── .gitignore
-├── package.json
-├── next.config.ts
-├── public/
-│   ├── models/
-│   │   └── humanoid.glb          # licensed, animated/rigged avatar
-│   ├── motions/
-│   │   ├── squat.glb             # compatible, reviewed animation
-│   │   └── biceps-curl.glb
-│   └── icons/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx
-│   │   ├── layout.tsx
-│   │   ├── globals.css
-│   │   └── api/coach/route.ts
-│   ├── components/
-│   │   ├── viewer/AvatarCanvas.tsx
-│   │   ├── viewer/AvatarModel.tsx
-│   │   ├── viewer/CameraControls.tsx
-│   │   ├── controls/PlaybackControls.tsx
-│   │   ├── coach/CoachChat.tsx
-│   │   ├── coach/MessageList.tsx
-│   │   └── debug/ActionLog.tsx
-│   ├── lib/
-│   │   ├── exercises/catalog.ts
-│   │   ├── exercises/schema.ts
-│   │   ├── scene/commands.ts
-│   │   ├── scene/reducer.ts
-│   │   ├── openai/client.ts
-│   │   ├── openai/tools.ts
-│   │   └── openai/system-prompt.ts
-│   ├── hooks/
-│   │   └── useSceneController.ts
-│   └── types/
-│       ├── coach.ts
-│       └── scene.ts
-├── tests/
-│   ├── scene-commands.test.ts
-│   ├── exercise-catalog.test.ts
-│   └── coach-route.test.ts
-├── scripts/
-│   └── validate-assets.mjs
-└── research/
-    └── sam3d-mhr/README.md       # optional independent research spike
-```
+- **Reliable enough to feel natural.** In the 8-prompt test suite (`npm run coach:eval`), every live response produced valid commands, with a median round trip of about 3.4 s on the deployed site.
+- **One round trip** whenever all commands validate. The model only gets a second turn when it needs to see a tool error.
+- **The app keeps working without it.** With no API key or no network, the coach shows *Offline* and every manual control still works. A deterministic keyword coach (`npm run dev:mock`) powers offline rehearsal and the end-to-end tests.
 
-Implementation notes: both clips live in one shared-rig GLB (`public/models/forma-mannequin.glb`) instead of separate `public/motions/*.glb` files. The mannequin and its motions are generated from `src/lib/avatar/`. The coach logic is in `src/lib/coach/handler.ts`, so it can be unit-tested; `src/app/api/coach/route.ts` only wires it up.
+## How the avatars are made
 
-## Quick start
+The bodies use Meta's [MHR](https://github.com/facebookresearch/MHR) parametric body model. Python scripts in `research/avatar-pipeline/` generate the motions offline. No motion-capture data is used.
 
-Prerequisites: Node.js 20.9+ (current LTS recommended), npm and Git. You only need an OpenAI API key with access to `gpt-6.1-sol` for the real coach.
+1. **Body shape.** For a photo avatar, [SAM 3D Body](https://github.com/facebookresearch/sam-3d-body) estimates the MHR shape from three photos, and the photos are projected into a skin texture.
+2. **Motion.** Each exercise is a timeline of key poses. A per-frame Gauss–Newton IK solver keeps the feet planted and puts the hands on the weights. It also checks that forearms and hands stay clear of the trunk and thighs, using depth maps of the body.
+3. **Clothes.** A T-shirt and shorts are draped over the body with signed-distance fields, with a cut for each body type. For photo avatars, sleeve and hem lengths are read from the photos.
+4. **Export.** Everything is baked into one skinned GLB (127-joint skeleton, seven clips, dumbbell and kettlebell props), which the app streams and plays with three.js.
+
+The built-in bodies (`public/models/mhr-generic*.glb`) are committed. Photo avatars are built on demand by an optional service (`services/avatar/`, on [Modal](https://modal.com)) and are never stored in this repository. The app hides avatar creation when the service isn't configured, so you don't need it to run Gym3DBeta locally.
+
+## Tech stack
+
+| Area | Tools |
+|---|---|
+| App | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, Zustand |
+| 3D | three.js, React Three Fiber, drei |
+| AI | OpenAI Responses API (GPT-6.1 Sol) with strict function calling, Zod |
+| Avatars | MHR (TorchScript), SAM 3D Body, NumPy, OpenCV, custom IK and GLB writer |
+| Quality | Vitest (unit and API tests with a fake OpenAI client), Playwright (iPhone 13 viewport), ESLint, asset validation |
+| Hosting | Vercel (app), Modal (optional avatar service) |
+
+## Run it locally
+
+Prerequisites: Node.js 20.9+ and npm. For the real coach, you need an OpenAI API key with access to `gpt-6.1-sol`.
 
 ```bash
+git clone https://github.com/selim-ba/forma-ai-coach.git
+cd forma-ai-coach
 npm install
-cp .env.example .env.local      # add OPENAI_API_KEY, or set COACH_MODE=mock
-npm run dev                     # http://localhost:3000
+cp .env.example .env.local   # then add your OpenAI key, or set COACH_MODE=mock
+npm run dev                  # http://localhost:3000
 ```
 
-Without an API key, the app still works as a manual 3D viewer, and the coach shows **Offline**. `npm run dev:mock` runs a deterministic keyword-based "mock" coach, labelled *Mock* in the UI. Use it for rehearsing the demo offline and for automated tests.
+No key? `npm run dev:mock` runs the keyword coach, and everything else works the same.
+
+To try it on your phone over the same Wi-Fi, run `npm run dev -- -H 0.0.0.0` and open `http://<your-computer's-ip>:3000`. To install it on the home screen, deploy over HTTPS (for example on Vercel, framework preset Next.js) and set the OpenAI variables as server environment variables. Keys stay on the server: never prefix them with `NEXT_PUBLIC_` and never commit `.env.local`.
 
 | Command | What it does |
 |---|---|
-| `npm run check` | Typecheck + lint + unit tests + asset validation |
-| `npm test` | Vitest: reducer, catalog ↔ clip markers, `/api/coach` tool loop with a fake OpenAI client, the plan's 8 test prompts against the mock coach |
-| `npm run coach:eval` | Sends the plan's 8 test prompts to a running app (`npm run dev`) and checks the resulting scene, validity and latency. With `OPENAI_API_KEY` set, this is the live GPT-6.1 gate |
-| `npm run assets:build` | Regenerates the mannequin GLB and runs per-frame motion QA (feet planted, floor contact, no hand/torso/thigh penetration) |
-| `npm run assets:validate` | Checks the GLB container, rig, bones, clips, durations, units and floor contact |
-| `npm run test:e2e` | Playwright at the iPhone 13 viewport against `next start` with the mock coach. Run `npx playwright install webkit chromium` and `npm run build` first |
+| `npm run dev` | Development server |
+| `npm run dev:mock` | Development server with the offline keyword coach |
+| `npm run check` | Typecheck, lint, unit tests and asset validation |
+| `npm test` | Vitest: scene reducer, catalog and clip markers, cue anchors, `/api/coach` tool loop |
+| `npm run test:e2e` | Playwright at the iPhone 13 viewport (needs `npm run build` and `npx playwright install` first) |
+| `npm run coach:eval` | Sends the test prompts to a running app and checks the commands, validity and latency |
+| `npm run assets:validate` | Checks the GLB files: rig, clips, durations and floor contact |
 
-Never prefix secrets with `NEXT_PUBLIC_` and never commit `.env.local`.
+## Project structure
 
-### Testing on an iPhone
-
-- **Same Wi-Fi (quick):** run `npm run dev -- -H 0.0.0.0`, find the Mac's IP with `ipconfig getifaddr en0`, then open `http://<mac-ip>:3000` in Safari on the iPhone. `next.config.ts` allows the Mac's own LAN addresses as dev origins; without that, Next.js 16 blocks the dev JavaScript and the page appears frozen.
-- **HTTPS (required for the final test and Home Screen install):** deploy, for example on Vercel. Set the framework preset to **Next.js**; a project imported before the code existed defaults to "Other" and serves only `public/`, so every page returns 404. Set `OPENAI_API_KEY` and `OPENAI_MODEL` as **server** environment variables; `OPENAI_REASONING_EFFORT` defaults to `low`.
-
-## Implementation status
-
-Last updated 2026-10-22.
-
-| Milestone | State | Evidence |
-|---|---|---|
-| 0–2 Scaffold + mobile shell | Done | Next.js 16 App Router; fixed shell sized to the visual viewport; safe areas; landscape two-column layout |
-| 2–5 Canvas, avatar, orbit | Done | Procedural rigged mannequin (`ASSETS.md`), 584 KiB GLB; touch orbit; front/side/¾ presets; DPR capped at 2; no real-time shadows |
-| 5–8 Squat + playback | Done | Play/pause/replay, 0.5×/1×, seek while paused; one active `AnimationAction` |
-| 8–10 Curl + catalog + phases | Done | Shared skeleton, no bind-pose glitch on switch; markers tested against the clips |
-| 10–13 API route + GPT-6.1 Sol | Done | Responses API tool loop, strict tool schema, Zod on server and client, rate limit, input caps. One round trip when every command validates. **Live `coach:eval` on the deployed site: 8/8 valid, median 3.4 s, max 4.4 s** (it was 5.1 s with two round trips) |
-| 13–15 Chat + reducer | Done | Commands applied once, visible in the Actions log; 40/40 unit tests |
-| 15–17 Device testing, errors | Done | Physical iPhone 13: touch rotation, controls, keyboard, landscape, smooth playback, the GPT demo script over mobile data, and the offline message (coach unavailable, manual controls remain) |
-| 17–19 Polish, deploy | Done | Deployed on Vercel over HTTPS (framework preset: Next.js; production branch `mvp/generic-avatar`); Add to Home Screen verified |
-| 19–20 Rehearsal | Done | The 60-second demo script completed twice in a row without intervention, from the Home Screen app (one cold start, one continuing run) |
-| After the MVP | Done | Default avatar is the generic MHR body (hair, dumbbells); photo → personal avatar pipeline with photo texture (`research/avatar-pipeline/`, local only); three more exercises: dumbbell shoulder press, dumbbell Romanian deadlift, split squat. The wooden mannequin (`?avatar=mannequin`) keeps only the squat and curl |
-
-Known follow-ups:
-- Optional: fall back to the keyword coach, labelled Offline, so typed commands work without a connection.
-- Run the Playwright iPhone 13 suite (`npm run test:e2e`) and keep it in CI.
-- Have a qualified coach review the cues and motions; the catalog marks them `pending_expert_review`.
-- Not implemented: voice, body-shape presets, and creating a personal avatar inside the app (the photo pipeline runs offline on a Mac; see `research/avatar-pipeline/README.md`).
-
-## Assets and rigging rules
-
-1. Source a rigged humanoid with an explicit license permitting intended demo distribution. Keep credits in `ASSETS.md` and don't commit assets whose terms forbid redistribution.
-2. Source two **correct exercise animations**. Do not assume a motion from a generic library is biomechanically appropriate.
-3. Prefer a single GLB with a shared skeleton and embedded clips, if available. If files have different rigs, retarget offline in Blender and export compatible GLBs.
-4. Record coordinate system, scale, bind pose, skeleton hierarchy, GLB size and clip duration.
-5. Keep the initial download light: target approximately 5–10 MB total assets as a **performance target**, not a verified benchmark.
-6. Validate that the avatar stays on-screen, feet remain near the floor and limbs do not severely penetrate the torso during curated motions.
-
-Three.js `AnimationMixer`/`AnimationAction` controls playback. Phase markers must be **authored per exercise**; they cannot safely be inferred from arbitrary clip timestamps. Keep the app animation state independent of model output.
-
-## Exercise catalog
-
-The catalog is the authority for valid exercise IDs and coaching content. Example schema:
-
-```ts
-type ExerciseId = "squat" | "biceps_curl";
-type View = "front" | "side" | "three_quarter";
-type Phase = "start" | "middle" | "bottom" | "top";
-
-type Exercise = {
-  id: ExerciseId;
-  title: string;
-  animationUrl: string;
-  availablePhases: Partial<Record<Phase, number>>; // normalized 0..1
-  availableViews: View[];
-  reviewedCues: string[];
-  limitations: string[];
-};
+```text
+src/
+  app/                    pages, icons, manifest, API routes (/api/coach, /api/avatar)
+  components/
+    viewer/               3D canvas, avatar playback, camera, form-cue overlays
+    controls/             playback bar, phase buttons, exercise picker
+    coach/                chat panel and Actions log
+    avatar/               avatar menu and photo capture flow
+    layout/               app shell and welcome screen
+  lib/
+    exercises/            exercise catalog (clips, phase markers, cues): the source of truth
+    scene/                command schema, reducer and store
+    openai/               client, tool definition, system prompt
+    coach/                coach handler (live and mock)
+    cues/                 3D cue definitions per exercise
+public/models/            generic man and woman bodies, legacy mannequin
+research/avatar-pipeline/ MHR bake: poses, IK, clothes, texture, GLB export
+services/avatar/          optional photo-to-avatar service (Modal)
+tests/                    Vitest suites and Playwright end-to-end test
 ```
 
-For each motion, author `availablePhases` based on that actual clip (example: a squat's `bottom` phase). A biceps curl may have `top` but no meaningful `bottom` marker. Avoid generating numeric form thresholds or individualized corrections from GPT alone.
+## Limits and honest caveats
 
-## GPT-6.1 Sol: coach and scene-control interface
+- **Educational demos, not coaching.** The motions and cues are general demo ranges. No qualified coach has reviewed them, and the app doesn't assess your technique.
+- **Not a body scan.** A photo avatar is an approximation for fun. It doesn't measure anything.
+- **Demo avatars** were made from AI-generated photos, not real people.
+- **Privacy.** Photos sent to the avatar service are deleted as soon as the avatar is built, and the avatar itself after 24 hours. Only your chat messages and the current scene state are sent to OpenAI; photos never are.
+- **Experimental code.** This project was built to explore a model. The code favours trying things quickly over long-term maintainability in places, especially in `research/`.
 
-The model interprets intent; the app executes deterministic actions. Use the **Responses API**, which supports GPT-6.1 Sol tool calling. Keep the provider SDK in a server-only module.
+## Credits
 
-Recommended validated command union:
+- [MHR](https://github.com/facebookresearch/MHR) by Meta (Apache-2.0): the body model behind every avatar.
+- [SAM 3D Body](https://github.com/facebookresearch/sam-3d-body) by Meta (SAM License): body reconstruction from photos. Its weights are not included in this repository; check its licence before any use beyond a personal demo.
+- [three.js](https://threejs.org), [React Three Fiber](https://r3f.docs.pmnd.rs) and [drei](https://github.com/pmndrs/drei) for rendering.
+- [OpenAI](https://developers.openai.com/api/docs/models/gpt-6.1-sol) for GPT-6.1 Sol.
 
-```ts
-type SceneCommand =
-  | { type: "select_exercise"; exerciseId: "squat" | "biceps_curl" }
-  | { type: "play" }
-  | { type: "pause" }
-  | { type: "set_speed"; speed: 0.5 | 1 }
-  | { type: "set_view"; view: "front" | "side" | "three_quarter" }
-  | { type: "seek_phase"; phase: "start" | "middle" | "bottom" | "top" }
-  | { type: "reset" };
-```
-
-Expose a model function `control_scene` with one or more such commands as strictly structured arguments. Validate against Zod on the server and **again** in the client reducer; reject commands not supported by the selected exercise. Limit command count, token output and chat length. Accept a final assistant explanation alongside the validated commands. The frontend must not execute arbitrary code from the model.
-
-Example intent/result:
-
-**User:** “Show squats from the side, slowly, and stop at the bottom.”
-
-```json
-{
-  "commands": [
-    { "type": "select_exercise", "exerciseId": "squat" },
-    { "type": "set_view", "view": "side" },
-    { "type": "set_speed", "speed": 0.5 },
-    { "type": "seek_phase", "phase": "bottom" },
-    { "type": "pause" }
-  ],
-  "message": "Here is the bottom position from the side. Watch your balance and maintain a comfortable range of motion."
-}
-```
-
-The JSON above illustrates the **internal app-facing result** after tool handling/validation; it is not a claim that Responses API emits this exact envelope automatically. Implement the actual `function_call`/`function_call_output` loop according to current official API documentation, or use a validated structured-output response for this simple MVP. When using tools, verify call IDs, execute only allowlisted commands, provide tool results and obtain the final natural-language answer.
-
-### System behavior requirements
-- Use exercise catalog facts and pre-reviewed cues; don't invent muscle activation percentages or diagnose injury.
-- Clarify unsupported exercise requests and offer the two supported demos.
-- Treat scene commands as untrusted until validated.
-- Never promise that an avatar's animation is a precise personalized biomechanical simulation.
-- Refuse requests for dangerous movement modifications and recommend appropriate professional advice for pain/injury concerns.
-- Prefer short, mobile-friendly replies (one to three sentences).
-
-### API request/response contract (your own endpoint)
-
-`POST /api/coach`
-
-```json
-{
-  "message": "Show me a squat from the side",
-  "scene": { "exerciseId": "biceps_curl", "playing": false, "speed": 1, "view": "front" }
-}
-```
-
-Example HTTP 200 body:
-
-```json
-{
-  "message": "Switching to a side-view squat demonstration.",
-  "commands": [
-    { "type": "select_exercise", "exerciseId": "squat" },
-    { "type": "set_view", "view": "side" },
-    { "type": "play" }
-  ]
-}
-```
-
-Add input size limits and basic rate limiting before any public deployment. Do not expose raw system prompts, API keys or provider errors to the browser. Keep conversation history bounded and avoid submitting personal photos to GPT as part of this MVP.
-
-## iPhone 13 verification checklist
-
-- [ ] Open the HTTPS deployment in Safari (not only Mac responsive preview).
-- [ ] Check portrait layout (~390 CSS px width, subject to device/browser settings) and landscape orientation.
-- [ ] Rotate avatar with touch; swipe gestures do not inadvertently scroll the entire page.
-- [ ] GLB finishes loading over mobile data; errors show a usable fallback.
-- [ ] Exercise playback operates at a usable frame rate; inspect FPS if possible rather than promising 60 FPS.
-- [ ] Test play, pause, replay, 0.5×, camera and phase controls.
-- [ ] Confirm chatbot command is executed exactly once with visible feedback.
-- [ ] Test lost network connection, API timeout, model invalid response and device sleep/resume.
-- [ ] Test Home Screen installation: Safari Share > Add to Home Screen (wording varies by iOS).
-- [ ] If voice is implemented, check mic permissions, HTTPS, Safari compatibility and fallback to typing.
-- [ ] Ensure touch targets are >=44×44 CSS px where practical and text/input focus works with the iOS keyboard.
-- [ ] Disable costly lighting/shadows/postprocessing if thermal throttling or rendering lag occurs.
-
-## Definition of done
-
-A developer unfamiliar with the repo can install it, run `npm run dev`, and reproduce the two-exercise demo. The app is accessible on a real iPhone 13 via HTTPS, and a GPT-6.1 request reliably changes the exercise, view, speed and playback state. It must still function as a manual 3D viewer when OpenAI is inaccessible. The animation assets must have documented licensing and must not be represented as personalized anatomical truth.
-
-## SAM 3D Body / MHR: subsequent research track
-
-After the core demo, run an **independent** experiment:
-
-1. Request access to official checkpoints at `facebook/sam-3d-body-dinov3` (or ViT-H) on Hugging Face.
-2. On a suitable GPU environment, reproduce official inference on a consenting subject's image.
-3. Inspect the MHR identity coefficients, pose and mesh/rig outputs.
-4. Try a neutral pose, lower-detail MHR asset and skinned GLB export.
-5. Verify MHR skeleton compatibility with the reference exercise clips; retarget offline if required.
-6. Compare identity consistency across photos and don't claim anatomical measurement precision.
-7. Replace the generic avatar **only after** the resulting personalized GLB animates successfully in the existing viewer.
-
-MHR's own repository includes a web viewer, FBX/LOD assets and SMPL conversion tooling; this **does not guarantee** a frictionless export/retargeting path to your particular Next.js scene. Keep Python/CUDA tooling outside the Node app and don't require it for startup.
-
-## Privacy and safety
-
-Current MVP processes typed instructions and renders a generic avatar; it does not collect user body photos. If photo reconstruction is added, obtain explicit consent, offer deletion, minimize retention and avoid committing photos or reconstructed personal meshes to Git. Show a clear notice: “Visual exercise education only; not medical or injury-prevention advice.” Feedback from camera/video will require validation before claims about joint angles, movement quality or safety.
-
-## Sources
-
-- GPT-6.1 Sol model: https://developers.openai.com/api/docs/models/gpt-6.1-sol
-- Responses API: https://developers.openai.com/api/reference/typescript/resources/responses/methods/create
-- OpenAI JS SDK: https://developers.openai.com/api/docs/libraries
-- Next.js App Router: https://nextjs.org/docs/app
-- Three.js AnimationMixer: https://threejs.org/docs/pages/AnimationMixer.html
-- SAM 3D Body: https://github.com/facebookresearch/sam-3d-body
-- Official SAM 3D Body setup: https://github.com/facebookresearch/sam-3d-body/blob/main/INSTALL.md
-- MHR: https://github.com/facebookresearch/MHR
-- MHR SMPL conversion: https://github.com/facebookresearch/MHR/tree/main/tools/mhr_smpl_conversion
-- Adobe Mixamo: https://www.mixamo.com/
-
-**No assets, exercise animations, model checkpoints or API credentials are bundled with this spec.**
+More detail: [`ASSETS.md`](ASSETS.md) (asset sources and licences), [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) (the original 20-hour plan), [`research/avatar-pipeline/README.md`](research/avatar-pipeline/README.md) (avatar pipeline).

@@ -5,11 +5,11 @@ Lets the iPhone app turn three photos into a personal avatar without the Mac. It
 ```
 iPhone ──photos──▶ Vercel /api/avatar ──(token)──▶ Modal  POST /avatars ──▶ GPU worker
    ▲                                                     │   SAM 3D Body → identity + texture
-   └──── polls status, downloads model.glb ◀─────────────┘   MHR bake → model.glb (5 clips)
+   └──── polls status, downloads model.glb ◀─────────────┘   MHR bake → model.glb (7 clips)
 ```
 
 - **Cost.** One avatar takes 2–3 minutes of 8 CPU cores, or a bit less with a T4 GPU: a few cents either way. Modal's free plan includes $30 of credit a month. Workers shut down 10 minutes after the last job.
-- **Privacy.** Photos are deleted as soon as the avatar is built, or fails. Avatars are deleted after 24 hours unless created with `keep` (the demo fallback). Anyone with an avatar's id can view or delete it.
+- **Privacy.** Photos are deleted as soon as the avatar is built, or fails. Avatars are deleted after 24 hours unless created with `keep` (the demo fallback). Anyone with an avatar's id can view it, and delete it unless it was kept (deleting a kept avatar needs the service token).
 - **Licences.** SAM 3D Body weights are under Meta's SAM License: check its terms before any use beyond a personal demo. MHR is Apache-2.0.
 
 ## One-time setup (Mac, `research/avatar-pipeline` environment active)
