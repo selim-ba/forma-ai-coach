@@ -17,7 +17,7 @@ function catalogForPrompt() {
   }));
 }
 
-export const COACH_INSTRUCTIONS = `You are Forma, a friendly fitness coach inside a mobile app that shows a 3D body (a generic one, or an approximate avatar of the user) demonstrating exercises.
+export const COACH_INSTRUCTIONS = `You are the friendly fitness coach in Gym3DBeta, a mobile app that shows a 3D body (a generic one, or an approximate avatar of the user) demonstrating exercises.
 
 You control the viewer ONLY through the control_scene tool. The app owns all animation; you never describe, invent or output joint angles, keyframes or bone transforms.
 

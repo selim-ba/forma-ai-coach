@@ -23,7 +23,7 @@ export const CONTROL_SCENE_TOOL = {
   type: "function" as const,
   name: CONTROL_SCENE_TOOL_NAME,
   description:
-    "Control the Forma 3D exercise viewer. Commands run in order in the user's browser. " +
+    "Control the Gym3DBeta 3D exercise viewer. Commands run in order in the user's browser. " +
     "Use select_exercise before seek_phase or show_cues when switching exercise. Only phases and cue ids listed for the exercise in the catalog are valid. " +
     "Set every argument that a command type does not use to null. " +
     "Put the short user-facing answer in `reply`; it is shown as-is if every command is accepted.",

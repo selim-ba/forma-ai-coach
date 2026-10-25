@@ -6,10 +6,10 @@ import "./globals.css";
 const display = Archivo({ subsets: ["latin"], axes: ["wdth"], variable: "--font-archivo", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Forma — AI 3D Fitness Coach",
+  title: "Gym3DBeta — 3D exercise coach",
   description: "Interactive 3D exercise demonstrations with a conversational coach.",
-  applicationName: "Forma",
-  appleWebApp: { capable: true, title: "Forma", statusBarStyle: "black-translucent" },
+  applicationName: "Gym3DBeta",
+  appleWebApp: { capable: true, title: "Gym3DBeta", statusBarStyle: "black-translucent" },
   formatDetection: { telephone: false },
 };
 

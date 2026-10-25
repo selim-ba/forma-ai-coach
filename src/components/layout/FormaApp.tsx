@@ -45,11 +45,22 @@ export function FormaApp() {
         <button
           type="button"
           onClick={() => window.dispatchEvent(new Event(SHOW_WELCOME_EVENT))}
-          className="shrink-0 rounded-lg font-display text-[1.35rem] font-extrabold leading-none tracking-[-0.01em] [font-stretch:85%]"
-          aria-label="Forma, about this app"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg"
+          aria-label="Gym3DBeta, about this app"
           data-testid="logo"
         >
-          forma<span className="text-accent">.</span>
+          <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden>
+            <polygon points="16,5 27.5,11.5 16,18 4.5,11.5" fill="#ff9a6b" />
+            <polygon points="4.5,11.5 16,18 16,29 4.5,22.5" fill="#ff6a2e" />
+            <polygon points="16,18 27.5,11.5 27.5,22.5 16,29" fill="#b8410f" />
+            <polyline points="4.5,11.5 16,18 27.5,11.5" fill="none" stroke="#ffd9c6" strokeWidth="1" strokeLinejoin="round" />
+          </svg>
+          <span className="font-display text-[1.3rem] font-extrabold leading-none tracking-[-0.01em] [font-stretch:85%]">
+            Gym3D
+          </span>
+          <span className="rounded-full border border-accent/60 px-1.5 py-px text-[10px] font-semibold leading-tight text-accent">
+            Beta
+          </span>
         </button>
         <div className="ml-auto flex min-w-0 justify-end">
           <ExercisePicker />

@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Forma — AI 3D Fitness Coach",
-    short_name: "Forma",
+    name: "Gym3DBeta — 3D exercise coach",
+    short_name: "Gym3DBeta",
     description: "Interactive 3D exercise demonstrations with a conversational coach.",
     start_url: "/",
     display: "standalone",
