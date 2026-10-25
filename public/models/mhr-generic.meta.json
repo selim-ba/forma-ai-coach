@@ -5,7 +5,7 @@
   "units": "metres",
   "up": "+Y",
   "forward": "+Z",
-  "bytes": 2337348,
+  "bytes": 2138012,
   "vertices": 18439,
   "joints": 127,
   "animatedJoints": {
@@ -43,7 +43,7 @@
           -0.0001,
           0.0007
         ],
-        "minWristToThighAxisM": 0.263
+        "minWristToThighAxisM": 0.256
       }
     },
     {
@@ -119,24 +119,6 @@
       }
     },
     {
-      "name": "goblet_squat",
-      "duration": 4.0,
-      "fps": 30,
-      "markers": {
-        "start": 0,
-        "middle": 0.2625,
-        "bottom": 0.5
-      },
-      "qa": {
-        "ankleDriftM": 0.0002,
-        "lowestVertexM": [
-          -0.0001,
-          0.0007
-        ],
-        "minWristToThighAxisM": 0.418
-      }
-    },
-    {
       "name": "kettlebell_swing",
       "duration": 4.0,
       "fps": 30,
@@ -152,24 +134,6 @@
           0.001
         ],
         "minWristToThighAxisM": 0.21
-      }
-    },
-    {
-      "name": "bent_over_row",
-      "duration": 4.0,
-      "fps": 30,
-      "markers": {
-        "start": 0,
-        "middle": 0.225,
-        "top": 0.425
-      },
-      "qa": {
-        "ankleDriftM": 2e-05,
-        "lowestVertexM": [
-          -0.0008,
-          -0.0008
-        ],
-        "minWristToThighAxisM": 0.26
       }
     },
     {
