@@ -1,7 +1,8 @@
 "use client";
 
-import { Camera, Trash2, UserRound } from "lucide-react";
+import { Camera, Sparkles, Trash2, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
+import { DEMO_AVATARS, isDemoAvatar } from "@/lib/avatar/demo";
 import { AVATAR_SERVICE_URL, deleteRemoteAvatar, myAvatarId } from "@/lib/avatar/remote";
 import { useSceneStore } from "@/lib/scene/store";
 import { AvatarCreator } from "./AvatarCreator";
@@ -36,6 +37,44 @@ export function MyAvatarButton() {
       cancelled = true;
     };
   }, []);
+
+  if (source.remote && isDemoAvatar(source.id)) {
+    // Demo backups: switch between them or go back; never delete (they are the demo fallback).
+    return (
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setMenu((m) => !m)}
+          className="flex min-h-9 items-center gap-1.5 rounded-full bg-black/45 px-3 text-xs font-semibold text-ink backdrop-blur-md"
+          aria-expanded={menu}
+          data-testid="demo-avatar-menu"
+        >
+          <Sparkles size={15} /> Demo avatar
+        </button>
+        {menu && (
+          <div className="absolute left-0 top-11 z-10 flex w-56 flex-col gap-1 rounded-2xl border border-white/10 bg-surface-raised p-1.5 shadow-xl">
+            {DEMO_AVATARS.filter((d) => d.id !== source.id).map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => window.location.assign(`/?avatar=${d.id}`)}
+                className="flex min-h-11 items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-ink active:bg-white/10"
+              >
+                <Sparkles size={16} /> {d.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => window.location.assign("/")}
+              className="flex min-h-11 items-center gap-2 rounded-xl px-3 text-left text-sm text-ink-muted active:bg-white/10"
+            >
+              Back to the generic body
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (source.remote) {
     return (
@@ -81,18 +120,48 @@ export function MyAvatarButton() {
     );
   }
 
-  if (!service?.enabled || source.id === "mannequin") return null;
+  if (source.id === "mannequin" || !AVATAR_SERVICE_URL) return null;
   return (
     <>
-      <div className="flex flex-col items-start gap-1.5">
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="flex min-h-9 items-center gap-1.5 rounded-full bg-accent px-3 text-xs font-bold text-surface shadow-lg"
-          data-testid="create-avatar"
-        >
-          <Camera size={15} /> Create my avatar
-        </button>
+      <div className="relative flex flex-col items-start gap-1.5">
+        <div className="flex items-center gap-1.5">
+          {service?.enabled && (
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-accent px-3 text-xs font-bold text-surface shadow-lg"
+              data-testid="create-avatar"
+            >
+              <Camera size={15} /> Create my avatar
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setMenu((m) => !m)}
+            aria-expanded={menu}
+            aria-label="Demo avatars"
+            className="flex size-9 items-center justify-center rounded-full bg-black/45 text-ink backdrop-blur-md"
+            data-testid="demo-avatars"
+          >
+            <Sparkles size={15} />
+          </button>
+        </div>
+        {menu && (
+          <div className="absolute left-0 top-11 z-10 flex w-56 flex-col gap-1 rounded-2xl border border-white/10 bg-surface-raised p-1.5 shadow-xl">
+            <p className="px-3 pb-1 pt-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-muted">Demo avatars</p>
+            {DEMO_AVATARS.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => window.location.assign(`/?avatar=${d.id}`)}
+                className="flex min-h-11 items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-ink active:bg-white/10"
+                data-testid={`demo-${d.id}`}
+              >
+                <Sparkles size={16} /> {d.label}
+              </button>
+            ))}
+          </div>
+        )}
         {saved && (
           <button
             type="button"
@@ -103,7 +172,9 @@ export function MyAvatarButton() {
           </button>
         )}
       </div>
-      {creating && <AvatarCreator codeRequired={service.codeRequired} onClose={() => setCreating(false)} />}
+      {creating && service && (
+        <AvatarCreator codeRequired={service.codeRequired} onClose={() => setCreating(false)} />
+      )}
     </>
   );
 }

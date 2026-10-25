@@ -1,4 +1,5 @@
 import { MODEL_URL } from "@/lib/exercises/catalog";
+import { isDemoAvatar } from "./demo";
 import { AVATAR_SERVICE_URL, REMOTE_AVATAR_ID, remoteGlbUrl } from "./remote";
 
 export type AvatarSource = {
@@ -85,7 +86,8 @@ function pickAvatar(search: string): AvatarSource {
   if (id === "mhr-generic") return MHR_GENERIC_AVATAR;
   if (id === "mhr-generic-f") return MHR_GENERIC_FEMALE_AVATAR;
   if (REMOTE_AVATAR_ID.test(id) && AVATAR_SERVICE_URL) {
-    return { id, url: remoteGlbUrl(id), label: "approximate body from your photos", personal: true, remote: true };
+    const label = isDemoAvatar(id) ? "demo avatar from AI-generated photos" : "approximate body from your photos";
+    return { id, url: remoteGlbUrl(id), label, personal: true, remote: true };
   }
   return { id, url: `/models/avatars/${id}.glb`, label: "approximate body shape from a photo", personal: true };
 }
